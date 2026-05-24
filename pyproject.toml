@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sieve-audit"
+version = "0.0.1"
+description = "SIEVE — Safety Indicator Evidence Validation Engine: validity checks for AI safety signals."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Ratnaditya Jonnalagadda", email = "ratnaditya@gmail.com" }]
+keywords = ["ai-safety", "interpretability", "evaluation", "activation-steering", "probes", "eval-awareness"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+]
+dependencies = [
+  "numpy>=1.24",
+  "scikit-learn>=1.3",
+  "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+inspect = ["inspect-ai>=0.3"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+sieve = "sieve_audit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Ratnaditya-J/sieve-audit"
+Paper = "https://github.com/Ratnaditya-J/alignment-evals/blob/main/docs/probing-is-not-enough.pdf"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sieve_audit"]

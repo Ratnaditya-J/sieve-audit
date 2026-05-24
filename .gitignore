@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.DS_Store
+
+# Data policy: never commit run artifacts or non-redistributable prompts.
+# SIEVE ships ONLY openly-licensed prompts; raw activations and judged runs
+# stay local.
+runs/
+*.npz
+*.jsonl
+data/private/
