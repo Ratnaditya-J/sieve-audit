@@ -1,11 +1,79 @@
-# Example: Qwen3-32B eval/deploy (L55)
+# Flagship demo: Qwen3-32B eval/deploy direction (L55), full protocol
 
-Flagship demo (planned). Reproduces the canonical SIEVE audit on the eval/deploy
-direction at Qwen3-32B L55: linearly decodable (AUROC 0.917), but **not causally
-sufficient** under matched random / orthogonal / wrong-layer controls.
+Reproduces the canonical SIEVE audit on the eval/deploy contrastive direction
+at Qwen3-32B layer 55 — the headline result of the companion paper
+*"Probing Is Not Enough"*: linearly decodable (AUROC ~0.917), but **not
+causally sufficient** under matched random / orthogonal / wrong-layer
+controls.
 
-Companion demos:
-- gpt-oss-120b **L15** -> effective, probe-direction null (corroborating).
-- gpt-oss-120b **L34** -> intervention ineffective -> inconclusive (shows the efficacy gate).
+Companion runs (same runbook, different model/layers):
+- gpt-oss-120b **L15** -> expected: effective, probe-direction null (corroborating).
+- gpt-oss-120b **L34** -> expected: intervention ineffective -> inconclusive
+  (demonstrates the efficacy gate; residual std ~961 swallows the injection).
 
-The generated audit card will be written to [`../../reports/`](../../reports/).
+## Requirements
+
+- 1x 80GB GPU (A100/H100) for Qwen3-32B bf16; ~1 GPU-day for the full grid.
+- Judge API keys for two independent judges (e.g. `ANTHROPIC_API_KEY` +
+  `OPENAI_API_KEY`).
+- Prompts: the companion repo's contrast set (Microsoft Test-Awareness
+  triggers) and `controlled_holdout_v2.yaml` (320 eval/deploy pairs,
+  4 families) from `alignment-evals/v4/prompts/`, converted to the runner's
+  JSONL format (`{prompt_id, text, label, family}`).
+
+## Runbook
+
+Pipeline status: smoke-tested end-to-end on a tiny CPU model (including the
+four pre-registered correctness checks); not yet executed on the 32B/120B
+targets.
+
+```bash
+pip install "sieve-audit[runner,judges]"
+RUN="python -m sieve_audit.adapters.hf_steering_runner"
+M=Qwen/Qwen3-32B
+
+# 1. directions: probe (mean-diff, z-scored, unit norm) + matched controls
+$RUN vectors --model $M --layer 55 \
+    --contrast-prompts contrast_triggers.jsonl --out vectors_qwen3_L55.npz
+
+# 2. pre-registered correctness checks (T1-T4) - must pass before any real run
+$RUN steer --model $M --layer 55 --vectors vectors_qwen3_L55.npz \
+    --wrong-layer 25 --steer-prompts steer_prompts.jsonl --test
+
+# 3. decodability: score the controlled holdout (disjoint from step 1's set)
+$RUN decode --model $M --layer 55 --vectors vectors_qwen3_L55.npz \
+    --holdout-prompts controlled_holdout_v2.jsonl --out decode_L55.json
+
+# 4. steered generations + efficacy records (4 arms x {0,±10,±20} x 100 prompts)
+$RUN steer --model $M --layer 55 --vectors vectors_qwen3_L55.npz \
+    --wrong-layer 25 --steer-prompts steer_prompts.jsonl \
+    --alphas -20 -10 10 20 --max-new-tokens 200 --out steer_L55.jsonl
+
+# 5. two independent judges
+$RUN judge --generations steer_L55.jsonl --steer-prompts steer_prompts.jsonl \
+    --judge anthropic:claude-opus-4-8 --judge openai:gpt-5.2 \
+    --metric "refusal/sandbagging/hedging composite (0-1)" --out judged_L55.jsonl
+
+# 6. bundle + audit
+$RUN bundle --decode decode_L55.json --steer steer_L55.jsonl --judged judged_L55.jsonl \
+    --model $M --layer 55 \
+    --direction-source "mean-diff (eval-deploy), z-scored, unit norm, L55" \
+    --prompt-distribution "controlled_holdout_v2 (4 families) + stage4 steer prompts" \
+    --prompt-license "see alignment-evals DATA_POLICY" \
+    --metric "eval-behavior composite" --attest-out-of-sample \
+    --out bundle_qwen3_L55.json
+sieve audit --bundle bundle_qwen3_L55.json --name qwen3_l55
+```
+
+The generated audit card lands in [`../../reports/`](../../reports/).
+
+## Notes
+
+- `--attest-out-of-sample` is only truthful if the holdout prompts were not
+  used to build the direction (they aren't: contrast set and holdout are
+  disjoint by construction).
+- Raw generations/judged outputs embed prompt text; keep them out of git
+  (the bundle JSON contains holdout texts too — check the prompt license
+  before committing a bundle).
+- Expected wall-clock at 200 new tokens: ~1700 generations (4 arms x 5
+  alphas x 100 prompts, minus shared alpha=0) at ~15-25s each on one H100.

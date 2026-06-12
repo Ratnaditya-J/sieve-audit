@@ -26,6 +26,8 @@ dependencies = [
 
 [project.optional-dependencies]
 inspect = ["inspect-ai>=0.3"]
+runner = ["torch>=2.1", "transformers>=4.40", "accelerate>=0.30"]
+judges = ["anthropic>=0.40", "openai>=1.40"]
 dev = ["pytest>=7"]
 
 [project.scripts]
