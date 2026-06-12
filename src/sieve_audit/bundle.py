@@ -1,0 +1,135 @@
+"""The evidence bundle: the serialized record a SIEVE audit consumes.
+
+SIEVE's core never touches a model. An adapter (nnsight / TransformerLens /
+Inspect / vendor script) runs the probe and the steering arms, records what
+happened, and serializes it here. The core then audits the *evidence*. This
+keeps the verdict logic reproducible, GPU-free, and signal-agnostic — and it
+means a closed-model vendor can self-run the adapter while anyone can re-run
+the audit from the bundle (DESIGN.md sections 4, 7).
+
+A bundle has three sections, one per audit stage:
+
+- ``decodability``: per-example probe scores, labels, raw texts, and a family
+  id used for held-out-family generalization splits.
+- ``efficacy``: per-(alpha, prompt) residual-stream movement and
+  output-changed flags, used by the efficacy gate.
+- ``steering``: per-(arm, alpha, prompt) behavioral scores from every judge.
+
+Serialization is a single JSON file (small: scores and flags, never raw
+activations), so bundles can be committed, diffed, and hashed.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class DecodabilityEvidence:
+    """Per-example evidence that the probe can (or cannot) read the signal."""
+
+    texts: list[str]            # raw prompt texts (surface baselines train on these)
+    labels: list[int]           # ground-truth condition per example (0/1)
+    probe_scores: list[float]   # the audited signal's score per example
+    families: list[str]         # prompt-family id per example (held-out splits)
+
+    def __post_init__(self) -> None:
+        n = len(self.texts)
+        if not (len(self.labels) == len(self.probe_scores) == len(self.families) == n):
+            raise ValueError("decodability fields must have equal length")
+        if n == 0:
+            raise ValueError("decodability evidence is empty")
+        if set(self.labels) - {0, 1}:
+            raise ValueError("labels must be 0/1")
+
+
+@dataclass
+class EfficacyRecord:
+    """One steered forward pass: did the intervention move anything?"""
+
+    alpha: float
+    prompt_id: str
+    resid_delta_norm: float     # ||h_steered - h_base|| at the intervened layer
+    resid_base_norm: float      # ||h_base|| (for relative movement)
+    expected_delta_norm: float  # |alpha| * ||w|| (hook-correctness reference)
+    output_changed: bool        # did any generated token differ from alpha=0?
+
+
+@dataclass
+class SteeringRecord:
+    """One judged steered generation in one arm of the control suite."""
+
+    arm: str                    # "probe" | "random" | "orthogonal" | "wrong_layer"
+    alpha: float
+    prompt_id: str
+    judge_scores: dict[str, float]  # judge name -> behavioral score in [0, 1]
+
+
+@dataclass
+class EvidenceBundle:
+    """Everything a SIEVE audit needs, recorded by an adapter."""
+
+    # --- scope (copied into the audit card verbatim) ---
+    model: str
+    revision: str | None
+    layers: list[int]
+    direction_source: str
+    prompt_distribution: str
+    prompt_license: str
+    behavioral_metrics: list[str]
+    adapter: str                 # what produced this bundle (name + version)
+
+    # --- evidence ---
+    decodability: DecodabilityEvidence | None = None
+    efficacy: list[EfficacyRecord] = field(default_factory=list)
+    steering: list[SteeringRecord] = field(default_factory=list)
+
+    bundle_version: str = "0.1"
+
+    # ---- (de)serialization ----
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def save(self, path: str | Path) -> None:
+        Path(path).write_text(json.dumps(self.to_dict(), indent=1))
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "EvidenceBundle":
+        dec = d.get("decodability")
+        return cls(
+            model=d["model"],
+            revision=d.get("revision"),
+            layers=list(d["layers"]),
+            direction_source=d["direction_source"],
+            prompt_distribution=d["prompt_distribution"],
+            prompt_license=d["prompt_license"],
+            behavioral_metrics=list(d["behavioral_metrics"]),
+            adapter=d["adapter"],
+            decodability=DecodabilityEvidence(**dec) if dec else None,
+            efficacy=[EfficacyRecord(**r) for r in d.get("efficacy", [])],
+            steering=[SteeringRecord(**r) for r in d.get("steering", [])],
+            bundle_version=d.get("bundle_version", "0.1"),
+        )
+
+    @classmethod
+    def load(cls, path: str | Path) -> "EvidenceBundle":
+        return cls.from_dict(json.loads(Path(path).read_text()))
+
+    # ---- convenience views ----
+
+    @property
+    def steering_arms(self) -> list[str]:
+        return sorted({r.arm for r in self.steering})
+
+    @property
+    def judge_names(self) -> list[str]:
+        names: set[str] = set()
+        for r in self.steering:
+            names.update(r.judge_scores)
+        return sorted(names)
+
+    @property
+    def alpha_grid(self) -> list[float]:
+        return sorted({r.alpha for r in self.steering})

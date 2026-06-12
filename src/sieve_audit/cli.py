@@ -1,7 +1,61 @@
-"""SIEVE command-line interface (stubs for v0.1; engine TODO)."""
+"""SIEVE command-line interface.
+
+- ``sieve audit --bundle bundle.json``: full audit, card to reports/
+- ``sieve selftest``: run the six rigged ground-truth scenarios and verify the
+  engine returns exactly the rigged verdicts (SIEVE auditing itself)
+"""
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
+
+from .bundle import EvidenceBundle
+from .card import write_card
+from .config import AuditConfig
+from .engine import run_audit
+from .synth import SCENARIOS
+from .verdict import INSUFFICIENT_PROTOCOL
+
+
+def _cmd_audit(args: argparse.Namespace) -> int:
+    cfg = AuditConfig(seed=args.seed)
+    bundle = EvidenceBundle.load(args.bundle)
+    result = run_audit(bundle, cfg, bundle_path=str(args.bundle))
+    stem = args.name or Path(args.bundle).stem
+    json_path, md_path = write_card(result.card, args.out, stem)
+    verdict = result.card.verdict.value if result.card.verdict else result.card.status
+    print(f"[sieve] verdict: {verdict}")
+    print(f"[sieve] card: {md_path} (+ {json_path.name})")
+    if result.card.status == INSUFFICIENT_PROTOCOL:
+        print("[sieve] protocol incomplete - no causal verdict was issued:")
+        for r in result.card.diagnostics["decision_reasons"]:
+            print(f"  - {r}")
+    return 0
+
+
+def _cmd_selftest(args: argparse.Namespace) -> int:
+    cfg = AuditConfig(seed=args.seed)
+    failures = []
+    for expected, make in SCENARIOS.items():
+        bundle = make(seed=args.seed)
+        result = run_audit(bundle, cfg)
+        got = (
+            result.card.verdict.value
+            if result.card.verdict
+            else result.card.status
+        )
+        ok = got == expected
+        print(f"[sieve] {'PASS' if ok else 'FAIL'}  {expected:28s} -> {got}")
+        if not ok:
+            failures.append((expected, got))
+        if args.out:
+            write_card(result.card, args.out, f"selftest_{expected}")
+    if failures:
+        print(f"[sieve] selftest FAILED: {failures}")
+        return 1
+    print("[sieve] selftest passed: 6/6 rigged scenarios returned the rigged verdict")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -10,17 +64,26 @@ def main(argv: list[str] | None = None) -> int:
         description="SIEVE - validity checks for AI safety signals (see DESIGN.md).",
     )
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("audit", help="run a full validity audit end-to-end (TODO)")
-    sub.add_parser("steer-controls", help="run matched-control steering (TODO)")
-    sub.add_parser("baselines", help="run surface baselines (length/TF-IDF/template) (TODO)")
-    sub.add_parser("report", help="render an audit card from results (TODO)")
-    args = parser.parse_args(argv)
 
+    p_audit = sub.add_parser("audit", help="run a full validity audit on an evidence bundle")
+    p_audit.add_argument("--bundle", required=True, help="path to an evidence bundle JSON")
+    p_audit.add_argument("--out", default="reports", help="output directory for the audit card")
+    p_audit.add_argument("--name", default=None, help="card filename stem (default: bundle stem)")
+    p_audit.add_argument("--seed", type=int, default=0)
+    p_audit.set_defaults(func=_cmd_audit)
+
+    p_self = sub.add_parser(
+        "selftest", help="audit six rigged ground-truth scenarios; verdicts must match"
+    )
+    p_self.add_argument("--out", default=None, help="also write the six audit cards here")
+    p_self.add_argument("--seed", type=int, default=0)
+    p_self.set_defaults(func=_cmd_selftest)
+
+    args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
         return 0
-    print(f"[sieve] '{args.command}' is not implemented yet - see DESIGN.md for the v0.1 plan.")
-    return 0
+    return args.func(args)
 
 
 if __name__ == "__main__":
