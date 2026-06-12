@@ -75,9 +75,25 @@ def build_card(
         allowed = [c.format(scope=scope) for c in ALLOWED_CLAIMS[decision.verdict]]
         disallowed = DISALLOWED_CLAIMS[decision.verdict] + DISALLOWED_CLAIMS_ALWAYS
     else:
-        allowed = [
-            "None. The protocol was incomplete; no claim is licensed by this audit."
-        ]
+        # protocol incomplete: no causal claim — but a cleanly-passed
+        # decodability stage still licenses its own (correlational) claims
+        decod_clean = (
+            decod is not None
+            and decod.beats_chance
+            and decod.beats_baselines
+            and not decod.protocol_violations
+        )
+        if decod_clean:
+            allowed = [
+                f"Under {scope}, the signal is linearly decodable on held-out "
+                "prompt families and beats surface (text-statistics) baselines.",
+                "NO causal or monitor-validation claim is licensed: the causal "
+                "stages of the protocol were not run (see decision reasons).",
+            ]
+        else:
+            allowed = [
+                "None. The protocol was incomplete; no claim is licensed by this audit."
+            ]
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
     risks = list(RESIDUAL_RISKS_COMMON)

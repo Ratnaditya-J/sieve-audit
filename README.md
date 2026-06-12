@@ -25,15 +25,32 @@ A SIEVE audit returns one of five verdicts:
 
 ## Status
 
-Pre-alpha. The design is specified in [`DESIGN.md`](DESIGN.md); the engine is in
-progress. v0.1 targets contrastive residual-stream directions in open-weight
-decoder LMs under single-layer additive steering.
+**v0.1 engine implemented and self-tested.** The design is specified in
+[`DESIGN.md`](DESIGN.md). The engine audits *evidence bundles* (recorded probe
+scores, residual-stream movement, judged steering outputs) so the verdict
+logic is GPU-free and reproducible from `(bundle, config, seed)`; adapters
+produce bundles from models or published artifacts.
 
-## Install (planned)
+- `sieve selftest` — six rigged ground-truth scenarios (noise probe,
+  length-confounded probe, dead steering hook, decodable-but-epiphenomenal
+  direction, truly causal direction, incomplete protocol) must return exactly
+  the rigged verdicts. 6/6.
+- Anti-gaming: hardened against an adversarial review (family gerrymandering,
+  degenerate controls, duplicate judges, sandbagged efficacy records,
+  weakened configs, in-sample probe scores, ...) with regression tests for
+  every exploit.
+- First real-world audit: the published Apollo deception probes
+  (arXiv 2502.03407) from released artifacts —
+  see [`examples/apollo_deception/`](examples/apollo_deception/).
+
+v0.1 scope: contrastive residual-stream directions in open-weight decoder LMs
+under single-layer additive steering.
+
+## Install
 
 ```bash
-pip install sieve-audit            # core
-pip install "sieve-audit[inspect]" # + Inspect integration
+pip install -e ".[dev]"   # from source (pre-PyPI)
+sieve selftest            # verify the verdict engine against ground truth
 ```
 
 ## Data policy

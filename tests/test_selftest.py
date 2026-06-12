@@ -25,12 +25,17 @@ def test_rigged_scenario_returns_rigged_verdict(expected: str, seed: int):
     )
 
 
-def test_insufficient_protocol_card_licenses_no_claims():
+def test_insufficient_protocol_card_licenses_no_causal_claims():
     bundle = SCENARIOS[INSUFFICIENT_PROTOCOL]()
     card = run_audit(bundle).card
     assert card.verdict is None
     assert card.status == INSUFFICIENT_PROTOCOL
-    assert all("None." in c or "no claim" in c.lower() for c in card.allowed_claims)
+    # decodability passed cleanly, so its correlational claim is licensed,
+    # but every causal/monitor claim must be refused
+    assert any("decodable" in c for c in card.allowed_claims)
+    assert any("NO causal" in c for c in card.allowed_claims)
+    assert not any("causally sufficient" in c.lower() for c in card.allowed_claims)
+    assert "Any safety or causal claim." in card.disallowed_claims
 
 
 def test_cards_are_reproducible():
