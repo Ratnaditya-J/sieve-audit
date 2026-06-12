@@ -3,15 +3,22 @@
 The causal-sufficiency question is never "did steering along the probe change
 behavior?" but "did it change behavior *more than matched controls*" — a
 random direction, an orthogonalized random direction, and the same direction
-injected at a wrong layer (DESIGN.md section 4). The primary test points are
-the largest-|alpha| values in the grid (fixed by the adapter's config before
-results exist, so they cannot be chosen post hoc), and a monotone
-dose-response across the grid is required so an isolated blip at one alpha
-cannot carry a causal verdict.
+injected at a wrong layer (DESIGN.md section 4).
 
-Judges: every steered generation is scored by >=2 independent judges; SIEVE
-reports inter-rater agreement (Cohen's kappa on binarized scores) and requires
-every judge to agree on the *direction* of the probe-arm effect.
+Hardened after adversarial review:
+
+- The primary test points are ALL largest-|alpha| values, the grid must be
+  sign-symmetric for a causal verdict, and probe significance is required at
+  every primary point with Bonferroni-adjusted CIs — no picking the lucky
+  alpha.
+- Probe-vs-control comparisons use per-prompt effect *magnitudes*, paired by
+  prompt (a control with large but mixed-sign effects cannot cancel to zero).
+- The dose-response p-value comes from a within-prompt permutation test
+  (per-record points are pseudo-replicated otherwise).
+- Judge agreement: Spearman on continuous scores over all records, kappa on
+  records where EVERY judge is outside the deadband, a minimum count of such
+  informative records, and near-perfect agreement over many records is
+  flagged as judge duplication — a protocol violation, not great evidence.
 """
 from __future__ import annotations
 
@@ -20,10 +27,17 @@ from dataclasses import dataclass, field
 from itertools import combinations
 
 import numpy as np
+from scipy.stats import spearmanr
 
 from .bundle import SteeringRecord
 from .config import AuditConfig
-from .stats import CI, bootstrap_abs_mean_diff, bootstrap_mean, cohen_kappa, dose_response
+from .stats import (
+    CI,
+    bootstrap_magnitude_diff,
+    bootstrap_mean,
+    cohen_kappa,
+    dose_response_clustered,
+)
 
 PROBE_ARM = "probe"
 
@@ -33,9 +47,10 @@ class JudgeResult:
     judges: list[str]
     min_pairwise_spearman: float    # continuous agreement, all records
     min_pairwise_kappa: float       # binarized agreement, informative records only
-    n_informative: int              # records outside the binarization deadband
+    n_informative: int              # records where every judge is outside the deadband
     agreement_ok: bool
     judges_agree_on_direction: bool
+    suspected_duplicates: bool      # near-perfect agreement over many records
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -46,6 +61,7 @@ class JudgeResult:
             "n_informative": self.n_informative,
             "agreement_ok": self.agreement_ok,
             "judges_agree_on_direction": self.judges_agree_on_direction,
+            "suspected_duplicates": self.suspected_duplicates,
             "notes": self.notes,
         }
 
@@ -54,19 +70,22 @@ class JudgeResult:
 class ControlsResult:
     arms: list[str]
     missing_controls: list[str]
-    primary_alphas: list[float]                      # largest-|alpha| points
+    primary_alphas: list[float]                      # all largest-|alpha| points
+    grid_symmetric: bool
     # arm -> {alpha: CI of mean per-prompt behavioral delta vs alpha=0}
     arm_effects: dict[str, dict[float, CI]]
     significant_probe_alphas: list[float]
-    # alpha -> control arm -> CI of |probe effect| - |control effect|
+    # alpha -> control arm -> CI of paired |probe effect| - |control effect|
     probe_vs_controls: dict[float, dict[str, CI]]
     dose_rho: float
     dose_p: float
     judge: JudgeResult
-    probe_effect_significant: bool
+    probe_effect_significant: bool      # at EVERY primary alpha (Bonferroni)
     exceeds_all_controls: bool
     dose_response_ok: bool
     causally_sufficient: bool
+    # conditions that invalidate the whole comparison (vs merely failing it)
+    protocol_violations: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -74,6 +93,7 @@ class ControlsResult:
             "arms": self.arms,
             "missing_controls": self.missing_controls,
             "primary_alphas": self.primary_alphas,
+            "grid_symmetric": self.grid_symmetric,
             "arm_effects": {
                 a: {str(al): ci.to_dict() for al, ci in d.items()}
                 for a, d in self.arm_effects.items()
@@ -90,6 +110,7 @@ class ControlsResult:
             "exceeds_all_controls": self.exceeds_all_controls,
             "dose_response_ok": self.dose_response_ok,
             "causally_sufficient": self.causally_sufficient,
+            "protocol_violations": self.protocol_violations,
             "notes": self.notes,
         }
 
@@ -100,20 +121,19 @@ def _mean_judge_score(r: SteeringRecord, judges: list[str]) -> float:
 
 def _paired_deltas(
     records: list[SteeringRecord], judges: list[str] | None = None
-) -> dict[str, dict[float, np.ndarray]]:
-    """Per-arm, per-alpha arrays of behavioral deltas vs the same prompt at alpha=0.
+) -> dict[str, dict[float, dict[str, float]]]:
+    """Per-arm, per-alpha {prompt_id: behavioral delta vs alpha=0, same prompt}.
 
     ``judges=None`` averages all judges; passing a single judge name computes
     that judge's view (used for the direction-agreement check).
     """
-    judge_list = judges
     by_arm: dict[str, dict[float, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
     all_judges = sorted({j for r in records for j in r.judge_scores})
-    use = judge_list if judge_list is not None else all_judges
+    use = judges if judges is not None else all_judges
     for r in records:
         by_arm[r.arm][r.alpha][r.prompt_id] = _mean_judge_score(r, use)
 
-    out: dict[str, dict[float, np.ndarray]] = {}
+    out: dict[str, dict[float, dict[str, float]]] = {}
     for arm, by_alpha in by_arm.items():
         base = by_alpha.get(0.0)
         if base is None:
@@ -123,13 +143,13 @@ def _paired_deltas(
             if alpha == 0.0:
                 continue
             shared = sorted(set(scores) & set(base))
-            out[arm][alpha] = np.array([scores[p] - base[p] for p in shared])
+            out[arm][alpha] = {p: scores[p] - base[p] for p in shared}
     return out
 
 
 def _judge_agreement(
     records: list[SteeringRecord],
-    deltas_by_judge: dict[str, dict[str, dict[float, np.ndarray]]],
+    deltas_by_judge: dict[str, dict[str, dict[float, dict[str, float]]]],
     primary_alphas: list[float],
     cfg: AuditConfig,
 ) -> JudgeResult:
@@ -143,12 +163,11 @@ def _judge_agreement(
             n_informative=0,
             agreement_ok=False,
             judges_agree_on_direction=False,
+            suspected_duplicates=False,
             notes=[f"only {len(judges)} judge(s); protocol requires >= {cfg.min_judges}"],
         )
 
     # continuous agreement over every judged generation (all arms)
-    from scipy.stats import spearmanr
-
     spearmans = []
     for a, b in combinations(judges, 2):
         sa = np.array([r.judge_scores[a] for r in records])
@@ -156,32 +175,51 @@ def _judge_agreement(
         rho = spearmanr(sa, sb).statistic
         spearmans.append(0.0 if np.isnan(rho) else float(rho))
     min_spearman = float(min(spearmans))
+    max_spearman = float(max(spearmans))
 
-    # binarized agreement, but only where the judges' mean score is away from
-    # the threshold — at the threshold, binarized (dis)agreement is pure noise
+    # near-perfect agreement over many records is duplication, not excellence
+    suspected_duplicates = (
+        len(records) >= cfg.duplicate_judge_min_n
+        and max_spearman > cfg.max_judge_spearman
+    )
+    if suspected_duplicates:
+        notes.append(
+            f"pairwise judge spearman {max_spearman:.4f} over {len(records)} "
+            f"records (> {cfg.max_judge_spearman}): judges are near-duplicates; "
+            "independent judges disagree sometimes"
+        )
+
+    # binarized agreement only where EVERY judge committed (outside deadband);
+    # at the threshold, binarized (dis)agreement is pure noise
     thr, band = cfg.judge_binarize_threshold, cfg.judge_deadband
     informative = [
         r
         for r in records
-        if abs(np.mean(list(r.judge_scores.values())) - thr) > band
+        if all(abs(s - thr) > band for s in r.judge_scores.values())
     ]
-    if informative:
+    if len(informative) >= cfg.min_informative_judged:
         kappas = []
         for a, b in combinations(judges, 2):
             ra = np.array([r.judge_scores[a] > thr for r in informative])
             rb = np.array([r.judge_scores[b] > thr for r in informative])
             kappas.append(cohen_kappa(ra, rb))
-        min_kappa = float(min(kappas))
-        kappa_ok = min_kappa >= cfg.min_judge_kappa
+        min_kappa = float(np.nanmin(kappas)) if not all(np.isnan(kappas)) else float("nan")
+        # constant raters (kappa NaN) carry no reliability evidence
+        kappa_ok = not np.isnan(min_kappa) and min_kappa >= cfg.min_judge_kappa
     else:
-        # no record left the deadband: nothing to binarize, kappa is moot
-        # (and the probe effect cannot be significant anyway)
         min_kappa = float("nan")
-        kappa_ok = True
-        notes.append("no judged record outside the deadband; kappa not computable")
+        kappa_ok = False
+        notes.append(
+            f"only {len(informative)} records outside the judge deadband "
+            f"(< {cfg.min_informative_judged}): binarized agreement not assessable"
+        )
 
-    agreement_ok = (min_spearman >= cfg.min_judge_spearman) and kappa_ok
-    if not agreement_ok:
+    agreement_ok = (
+        (min_spearman >= cfg.min_judge_spearman)
+        and kappa_ok
+        and not suspected_duplicates
+    )
+    if not agreement_ok and not notes:
         notes.append(
             f"judge agreement failed (min spearman {min_spearman:.2f} "
             f"vs >= {cfg.min_judge_spearman}; min kappa {min_kappa:.2f} on "
@@ -194,8 +232,10 @@ def _judge_agreement(
         signs = []
         for j in judges:
             d = deltas_by_judge[j].get(PROBE_ARM, {}).get(alpha)
-            if d is not None and len(d) and abs(d.mean()) > 1e-12:
-                signs.append(np.sign(d.mean()))
+            if d:
+                m = float(np.mean(list(d.values())))
+                if abs(m) > 1e-12:
+                    signs.append(np.sign(m))
         if len(set(signs)) > 1:
             direction_ok = False
             notes.append(f"judges disagree on probe effect direction at alpha={alpha:g}")
@@ -207,6 +247,7 @@ def _judge_agreement(
         n_informative=len(informative),
         agreement_ok=agreement_ok,
         judges_agree_on_direction=direction_ok,
+        suspected_duplicates=suspected_duplicates,
         notes=notes,
     )
 
@@ -216,6 +257,7 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
         raise ValueError("no steering records")
     rng = np.random.default_rng(cfg.seed)
     notes: list[str] = []
+    violations: list[str] = []
 
     arms = sorted({r.arm for r in records})
     missing = [c for c in cfg.required_controls if c not in arms]
@@ -223,16 +265,25 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
         raise ValueError("steering records contain no 'probe' arm")
 
     deltas = _paired_deltas(records)
+    if PROBE_ARM not in deltas:
+        raise ValueError("probe arm has no alpha=0 records: deltas cannot be paired")
     judges = sorted({j for r in records for j in r.judge_scores})
     deltas_by_judge = {j: _paired_deltas(records, judges=[j]) for j in judges}
 
-    probe_alphas = sorted(deltas.get(PROBE_ARM, {}), key=abs)
+    probe_alphas = sorted(deltas[PROBE_ARM], key=abs)
     if not probe_alphas:
         raise ValueError("probe arm has no nonzero-alpha records paired with alpha=0")
     max_abs = abs(probe_alphas[-1])
     primary = sorted(a for a in deltas[PROBE_ARM] if abs(a) == max_abs)
+    grid_symmetric = {-max_abs, max_abs} <= set(deltas[PROBE_ARM])
+    if cfg.require_symmetric_grid and not grid_symmetric:
+        violations.append(
+            f"alpha grid is not sign-symmetric at |alpha|={max_abs:g}; a "
+            "one-sided grid halves the evidence and invites cherry-picking"
+        )
 
-    # per-arm effects with CIs
+    # per-arm effects with Bonferroni-adjusted CIs at the primary points
+    adj_level = 1.0 - (1.0 - cfg.ci_level) / max(len(primary), 1)
     arm_effects: dict[str, dict[float, CI]] = {}
     for arm, by_alpha in deltas.items():
         arm_effects[arm] = {}
@@ -242,40 +293,38 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
                     f"{arm}@alpha={alpha:g}: only {len(d)} paired prompts "
                     f"(< {cfg.min_steered_prompts})"
                 )
-            arm_effects[arm][alpha] = bootstrap_mean(d, rng, cfg.n_boot, cfg.ci_level)
+            level = adj_level if (arm == PROBE_ARM and alpha in primary) else cfg.ci_level
+            arm_effects[arm][alpha] = bootstrap_mean(
+                np.array(list(d.values())), rng, cfg.n_boot, level
+            )
 
     underpowered = any("paired prompts" in n for n in notes)
 
-    # probe effect significance at primary points
+    # probe effect must be significant at EVERY primary point
     significant = [a for a in primary if arm_effects[PROBE_ARM][a].excludes(0.0)]
-    probe_sig = bool(significant)
+    probe_sig = len(significant) == len(primary) and bool(primary)
 
-    # probe vs each control, matched alpha, at the significant primary points
+    # probe vs each control: paired magnitude comparison at every primary point
     probe_vs_controls: dict[float, dict[str, CI]] = {}
-    exceeds_all = probe_sig and not missing
-    for alpha in significant:
+    exceeds_all = bool(primary) and not missing and bool(cfg.required_controls)
+    for alpha in primary:
         probe_vs_controls[alpha] = {}
         for control in cfg.required_controls:
             d_control = deltas.get(control, {}).get(alpha)
-            if d_control is None or len(d_control) == 0:
+            if not d_control:
                 notes.append(f"control '{control}' missing at alpha={alpha:g}")
                 exceeds_all = False
                 continue
-            diff = bootstrap_abs_mean_diff(
+            diff = bootstrap_magnitude_diff(
                 deltas[PROBE_ARM][alpha], d_control, rng, cfg.n_boot, cfg.ci_level
             )
             probe_vs_controls[alpha][control] = diff
             if not diff.lo > 0:
                 exceeds_all = False
 
-    # dose-response over the full grid (per-record points for power)
-    pairs = [
-        (alpha, v)
-        for alpha, d in deltas[PROBE_ARM].items()
-        for v in d
-    ]
-    dose_rho, dose_p = dose_response(
-        np.array([p[0] for p in pairs]), np.array([p[1] for p in pairs])
+    # dose-response over the full grid, within-prompt permutation p
+    dose_rho, dose_p = dose_response_clustered(
+        deltas[PROBE_ARM], rng, n_perm=cfg.n_perm
     )
     dose_ok = abs(dose_rho) >= cfg.dose_response_min_rho and dose_p <= cfg.dose_response_max_p
     if len(deltas[PROBE_ARM]) < 2:
@@ -283,6 +332,8 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
         notes.append("fewer than 2 nonzero alphas: dose-response untestable")
 
     judge = _judge_agreement(records, deltas_by_judge, primary, cfg)
+    if judge.suspected_duplicates:
+        violations.append("judges are near-duplicates (see judge notes)")
 
     causal = (
         probe_sig
@@ -292,12 +343,14 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
         and judge.judges_agree_on_direction
         and not missing
         and not underpowered
+        and not violations
     )
 
     return ControlsResult(
         arms=arms,
         missing_controls=missing,
         primary_alphas=primary,
+        grid_symmetric=grid_symmetric,
         arm_effects=arm_effects,
         significant_probe_alphas=significant,
         probe_vs_controls=probe_vs_controls,
@@ -308,5 +361,6 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
         exceeds_all_controls=exceeds_all,
         dose_response_ok=dose_ok,
         causally_sufficient=causal,
+        protocol_violations=violations,
         notes=notes,
     )

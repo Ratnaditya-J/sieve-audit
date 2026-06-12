@@ -1,4 +1,4 @@
-"""Unit tests for the individual gates and the anti-gaming asymmetries."""
+"""Unit tests for the individual gates and statistical primitives."""
 import numpy as np
 import pytest
 
@@ -6,8 +6,8 @@ from sieve_audit import AuditConfig, run_audit
 from sieve_audit.bundle import EfficacyRecord, SteeringRecord
 from sieve_audit.controls import run_controls
 from sieve_audit.efficacy import run_efficacy
-from sieve_audit.stats import cohen_kappa, dose_response
-from sieve_audit.synth import SCENARIOS, scenario_causally_sufficient
+from sieve_audit.stats import cohen_kappa, dose_response_clustered
+from sieve_audit.synth import scenario_causally_sufficient
 from sieve_audit.verdict import INSUFFICIENT_PROTOCOL, Verdict
 
 CFG = AuditConfig()
@@ -16,7 +16,7 @@ CFG = AuditConfig()
 # --- efficacy gate -----------------------------------------------------------
 
 
-def _eff(alpha, delta, base=100.0, expected=None, changed=True, pid="p0"):
+def _eff(alpha, delta, base=100.0, expected=None, changed=True, pid="p0", arm="probe"):
     return EfficacyRecord(
         alpha=alpha,
         prompt_id=pid,
@@ -24,12 +24,15 @@ def _eff(alpha, delta, base=100.0, expected=None, changed=True, pid="p0"):
         resid_base_norm=base,
         expected_delta_norm=abs(alpha) if expected is None else expected,
         output_changed=changed,
+        arm=arm,
     )
 
 
 def test_efficacy_gate_cannot_pass_by_omission():
     with pytest.raises(ValueError):
         run_efficacy([], CFG)
+    with pytest.raises(ValueError):  # records exist, but not for the probe arm
+        run_efficacy([_eff(20.0, 20.0, arm="random")], CFG, arm="probe")
 
 
 def test_efficacy_gate_rejects_alpha_zero_only():
@@ -105,20 +108,38 @@ def test_decodability_only_bundle_gets_no_causal_verdict():
 # --- stats -------------------------------------------------------------------
 
 
-def test_cohen_kappa_perfect_and_chance():
+def test_cohen_kappa_alternating_and_constant():
     a = np.array([0, 1, 0, 1, 0, 1] * 10)
     assert cohen_kappa(a, a) == 1.0
     assert abs(cohen_kappa(a, 1 - a)) > 0.9  # systematic disagreement -> strongly negative
+    const = np.ones(60, dtype=int)
+    assert np.isnan(cohen_kappa(const, const))  # constant raters: no evidence
 
 
 def test_dose_response_needs_three_alphas():
-    rho, p = dose_response(np.array([1.0, 2.0]), np.array([0.1, 0.2]))
+    deltas = {1.0: {"p0": 0.1, "p1": 0.2}, 2.0: {"p0": 0.2, "p1": 0.3}}
+    rho, p = dose_response_clustered(deltas, np.random.default_rng(0))
     assert rho == 0.0 and p == 1.0
 
 
 def test_dose_response_monotone():
-    alphas = np.repeat([-20, -10, 0, 10, 20], 20).astype(float)
     rng = np.random.default_rng(0)
-    effects = alphas * 0.01 + rng.normal(0, 0.02, len(alphas))
-    rho, p = dose_response(alphas, effects)
-    assert abs(rho) > 0.8 and p < 0.001
+    deltas = {
+        float(a): {f"p{i}": 0.01 * a + rng.normal(0, 0.02) for i in range(20)}
+        for a in (-20, -10, 10, 20)
+    }
+    rho, p = dose_response_clustered(deltas, rng, n_perm=500)
+    assert abs(rho) > 0.8 and p < 0.01
+
+
+def test_dose_response_null_is_not_significant():
+    """Within-prompt permutation must not inflate significance on null data."""
+    rng = np.random.default_rng(0)
+    # per-prompt offsets shared across alphas (the pseudo-replication trap)
+    offsets = {f"p{i}": rng.normal(0, 0.2) for i in range(20)}
+    deltas = {
+        float(a): {p: off + rng.normal(0, 0.02) for p, off in offsets.items()}
+        for a in (-20, -10, 10, 20)
+    }
+    _, p = dose_response_clustered(deltas, rng, n_perm=500)
+    assert p > 0.05

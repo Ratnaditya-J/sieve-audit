@@ -45,7 +45,9 @@ def _texts_and_labels(
     texts, labels, families = [], [], []
     for i in range(n):
         label = int(i % 2)
-        family = _FAMILIES[i % len(_FAMILIES)]
+        # family must vary independently of label, or every family is
+        # single-class and the audit (rightly) refuses the bundle
+        family = _FAMILIES[(i // 2) % len(_FAMILIES)]
         if length_confound:
             # label leaks into raw text length: the surface confound
             n_words = rng.integers(20, 30) if label else rng.integers(5, 12)
@@ -70,38 +72,49 @@ def _decod(
         for lab in labels
     ]
     return DecodabilityEvidence(
-        texts=texts, labels=labels, probe_scores=scores, families=families
+        texts=texts,
+        labels=labels,
+        probe_scores=scores,
+        families=families,
+        probe_scores_out_of_sample=True,
     )
 
 
 def _efficacy(rng: np.random.Generator, n: int, dead: bool) -> list[EfficacyRecord]:
-    """Residual-movement records; `dead=True` rigs the gpt-oss L34 failure mode."""
+    """Residual-movement records, one set per steering arm.
+
+    `dead=True` rigs the gpt-oss L34 failure mode (for every arm: the layer
+    itself is dead). Control arms are otherwise live interventions too — the
+    engine requires that, so a degenerate control cannot flatter the probe.
+    """
     records = []
     base_norm = 100.0
     w_norm = 1.0
-    for alpha in _ALPHAS:
-        for p in range(n):
-            expected = abs(alpha) * w_norm
-            if dead and alpha != 0.0:
-                # quantization swallows the injection: nothing moves
-                delta = float(abs(rng.normal(0, 1e-4)))
-                changed = False
-            elif alpha == 0.0:
-                delta = 0.0
-                changed = False
-            else:
-                delta = float(expected * (1 + rng.normal(0, 0.05)))
-                changed = bool(abs(alpha) >= 10.0)
-            records.append(
-                EfficacyRecord(
-                    alpha=alpha,
-                    prompt_id=f"p{p}",
-                    resid_delta_norm=delta,
-                    resid_base_norm=base_norm,
-                    expected_delta_norm=expected,
-                    output_changed=changed,
+    for arm in ("probe", *_CONTROLS):
+        for alpha in _ALPHAS:
+            for p in range(n):
+                expected = abs(alpha) * w_norm
+                if dead and alpha != 0.0:
+                    # quantization swallows the injection: nothing moves
+                    delta = float(abs(rng.normal(0, 1e-4)))
+                    changed = False
+                elif alpha == 0.0:
+                    delta = 0.0
+                    changed = False
+                else:
+                    delta = float(expected * (1 + rng.normal(0, 0.05)))
+                    changed = bool(abs(alpha) >= 10.0)
+                records.append(
+                    EfficacyRecord(
+                        alpha=alpha,
+                        prompt_id=f"p{p}",
+                        resid_delta_norm=delta,
+                        resid_base_norm=base_norm,
+                        expected_delta_norm=expected,
+                        output_changed=changed,
+                        arm=arm,
+                    )
                 )
-            )
     return records
 
 
@@ -169,7 +182,11 @@ def scenario_surface_confounded(seed: int = 0, n: int = 240) -> EvidenceBundle:
     return EvidenceBundle(
         **_scope("surface-confounded"),
         decodability=DecodabilityEvidence(
-            texts=texts, labels=labels, probe_scores=scores, families=families
+            texts=texts,
+            labels=labels,
+            probe_scores=scores,
+            families=families,
+            probe_scores_out_of_sample=True,
         ),
         efficacy=_efficacy(rng, 30, dead=False),
         steering=_steering(rng, 30, probe_gain=0.0, control_gain=0.0),

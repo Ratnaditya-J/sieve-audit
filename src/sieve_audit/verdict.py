@@ -85,15 +85,29 @@ class Decision:
 
 def decide(
     decod: "DecodabilityResult | None",
-    efficacy: "EfficacyResult | None",
+    probe_efficacy: "EfficacyResult | None",
     controls: "ControlsResult | None",
-    required_controls: tuple[str, ...],
+    hard_gaps: list[str],
+    sufficiency_blockers: list[str],
     min_judges: int,
 ) -> Decision:
-    """Map stage results to a verdict, refusing where the protocol is incomplete."""
-    if decod is None:
-        return Decision(None, INSUFFICIENT_PROTOCOL, ["no decodability evidence"])
+    """Map stage results to a verdict, refusing where the protocol is incomplete.
 
+    ``hard_gaps`` are engine-detected protocol failures (bundle inconsistency,
+    non-standard control suite, degenerate control arms, stage crashes): any
+    of them forces a refusal at the causal stage. ``sufficiency_blockers``
+    (inadequate n, underpowered arms) block only the CAUSALLY_SUFFICIENT
+    upgrade: they resolve to a refusal *only* when the signal would otherwise
+    have earned the stronger claim, so under-powering can never dodge a
+    negative verdict.
+    """
+    if decod is None:
+        return Decision(
+            None, INSUFFICIENT_PROTOCOL, ["no decodability evidence"] + hard_gaps
+        )
+
+    # Negative decodability verdicts are conservative: they remain valid even
+    # when the protocol around them is shaky.
     if not decod.beats_chance:
         return Decision(
             Verdict.NOT_DECODABLE,
@@ -102,9 +116,7 @@ def decide(
         )
     if not decod.beats_baselines:
         matched = [
-            name
-            for name, ci in decod.probe_vs_baseline.items()
-            if not ci.lo > 0
+            name for name, ci in decod.probe_vs_baseline.items() if not ci.lo > 0
         ]
         return Decision(
             Verdict.SURFACE_CONFOUNDED,
@@ -112,9 +124,15 @@ def decide(
             [f"surface baseline(s) {matched} match the probe on held-out families"],
         )
 
+    # A *positive* decodability finding is only as good as the comparison it
+    # won; violations (gerrymandered families, in-sample scores, silenced
+    # baselines) void it.
+    if decod.protocol_violations:
+        return Decision(None, INSUFFICIENT_PROTOCOL, list(decod.protocol_violations))
+
     # --- causal stages require the full protocol ---
-    gaps: list[str] = []
-    if efficacy is None:
+    gaps: list[str] = list(hard_gaps)
+    if probe_efficacy is None:
         gaps.append("no efficacy evidence (gate cannot run)")
     if controls is None:
         gaps.append("no steering evidence (control suite cannot run)")
@@ -125,41 +143,65 @@ def decide(
             gaps.append(
                 f"only {len(controls.judge.judges)} judge(s); >= {min_judges} required"
             )
+        gaps.extend(controls.protocol_violations)
     if gaps:
         return Decision(None, INSUFFICIENT_PROTOCOL, gaps)
-    assert efficacy is not None and controls is not None
+    assert probe_efficacy is not None and controls is not None
 
-    if not efficacy.effective:
+    if not probe_efficacy.effective:
         return Decision(
             Verdict.INTERVENTION_INEFFECTIVE,
             "ok",
             ["intervention did not take effect; causality is UNTESTED, not absent"]
-            + efficacy.notes,
+            + probe_efficacy.notes,
         )
 
-    if controls.causally_sufficient:
+    # substantive causal evaluation
+    substantive_pass = (
+        controls.probe_effect_significant
+        and controls.exceeds_all_controls
+        and controls.dose_response_ok
+        and controls.judge.agreement_ok
+        and controls.judge.judges_agree_on_direction
+    )
+    if not substantive_pass:
+        reasons = []
+        if not controls.probe_effect_significant:
+            reasons.append(
+                "probe-arm behavioral effect not significant at every primary alpha"
+            )
+        elif not controls.exceeds_all_controls:
+            reasons.append("probe-arm effect does not exceed all matched controls")
+        if not controls.dose_response_ok:
+            reasons.append(
+                f"no monotone dose-response (rho={controls.dose_rho:.2f}, "
+                f"p={controls.dose_p:.3f})"
+            )
+        if not (controls.judge.agreement_ok and controls.judge.judges_agree_on_direction):
+            reasons.append(
+                "judge agreement insufficient (cannot support the stronger claim; "
+                "does not rescue the signal from this verdict)"
+            )
+        reasons.extend(controls.notes)
+        return Decision(Verdict.NOT_CAUSALLY_SUFFICIENT, "ok", reasons)
+
+    # the signal passed every substantive test; only now can evidence-quality
+    # blockers force a refusal (never a downgrade-dodge)
+    blockers = list(sufficiency_blockers)
+    blockers += [n for n in controls.notes if "paired prompts" in n]
+    if blockers:
         return Decision(
-            Verdict.CAUSALLY_SUFFICIENT,
-            "ok",
-            ["probe effect exceeds all matched controls, dose-responsive, judge-agreed"],
+            None,
+            INSUFFICIENT_PROTOCOL,
+            ["signal passed all controls, but evidence quality is insufficient "
+             "for a causal verdict:"] + blockers,
         )
 
-    reasons = []
-    if not controls.probe_effect_significant:
-        reasons.append("probe-arm behavioral effect not distinguishable from zero")
-    elif not controls.exceeds_all_controls:
-        reasons.append("probe-arm effect does not exceed all matched controls")
-    if not controls.dose_response_ok:
-        reasons.append(
-            f"no monotone dose-response (rho={controls.dose_rho:.2f}, p={controls.dose_p:.3f})"
-        )
-    if not (controls.judge.agreement_ok and controls.judge.judges_agree_on_direction):
-        reasons.append(
-            "judge agreement insufficient (cannot support the stronger claim; "
-            "does not rescue the signal from this verdict)"
-        )
-    reasons.extend(controls.notes)
-    return Decision(Verdict.NOT_CAUSALLY_SUFFICIENT, "ok", reasons)
+    return Decision(
+        Verdict.CAUSALLY_SUFFICIENT,
+        "ok",
+        ["probe effect exceeds all matched controls, dose-responsive, judge-agreed"],
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -48,9 +48,14 @@ class EfficacyResult:
         }
 
 
-def run_efficacy(records: list[EfficacyRecord], cfg: AuditConfig) -> EfficacyResult:
+def run_efficacy(
+    records: list[EfficacyRecord], cfg: AuditConfig, arm: str = "probe"
+) -> EfficacyResult:
+    records = [r for r in records if r.arm == arm]
     if not records:
-        raise ValueError("no efficacy records: the gate cannot pass by omission")
+        raise ValueError(
+            f"no efficacy records for arm {arm!r}: the gate cannot pass by omission"
+        )
 
     notes: list[str] = []
     alphas = np.array([r.alpha for r in records])
@@ -117,3 +122,18 @@ def run_efficacy(records: list[EfficacyRecord], cfg: AuditConfig) -> EfficacyRes
         effective=effective,
         notes=notes,
     )
+
+
+def run_efficacy_all_arms(
+    records: list[EfficacyRecord], cfg: AuditConfig
+) -> dict[str, EfficacyResult]:
+    """Efficacy per steering arm.
+
+    The probe arm's result is the efficacy gate proper. Control arms are
+    checked too: a "control" that never moved the residual stream is
+    degenerate (zero-norm vector, dead hook) and would make any probe look
+    causally superior — so causal verdicts require every control arm to have
+    passed its own movement check.
+    """
+    arms = sorted({r.arm for r in records})
+    return {arm: run_efficacy(records, cfg, arm) for arm in arms}

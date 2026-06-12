@@ -33,6 +33,10 @@ class DecodabilityEvidence:
     labels: list[int]           # ground-truth condition per example (0/1)
     probe_scores: list[float]   # the audited signal's score per example
     families: list[str]         # prompt-family id per example (held-out splits)
+    # Explicit attestation that no listed example was used to TRAIN the probe.
+    # Without it, in-sample probe scores would face cross-validated baselines:
+    # an unfair fight the probe always wins. Defaults to False (untrusted).
+    probe_scores_out_of_sample: bool = False
 
     def __post_init__(self) -> None:
         n = len(self.texts)
@@ -46,7 +50,13 @@ class DecodabilityEvidence:
 
 @dataclass
 class EfficacyRecord:
-    """One steered forward pass: did the intervention move anything?"""
+    """One steered forward pass: did the intervention move anything?
+
+    Recorded per steering arm: the efficacy gate applies to the probe arm,
+    and every control arm must also demonstrably move the stream — otherwise
+    a degenerate (e.g. near-zero-norm) "control" makes any probe look
+    superior.
+    """
 
     alpha: float
     prompt_id: str
@@ -54,6 +64,7 @@ class EfficacyRecord:
     resid_base_norm: float      # ||h_base|| (for relative movement)
     expected_delta_norm: float  # |alpha| * ||w|| (hook-correctness reference)
     output_changed: bool        # did any generated token differ from alpha=0?
+    arm: str = "probe"          # which steering arm this pass belongs to
 
 
 @dataclass
@@ -86,6 +97,21 @@ class EvidenceBundle:
     steering: list[SteeringRecord] = field(default_factory=list)
 
     bundle_version: str = "0.1"
+
+    def validate(self) -> None:
+        """Reject bundles with duplicate records (silent last-wins overwrites
+        would let a vendor submit retakes and keep the favorable one)."""
+        seen: set[tuple] = set()
+        for r in self.steering:
+            key = ("steer", r.arm, r.alpha, r.prompt_id)
+            if key in seen:
+                raise ValueError(f"duplicate steering record: {key}")
+            seen.add(key)
+        for r in self.efficacy:
+            key = ("eff", r.arm, r.alpha, r.prompt_id)
+            if key in seen:
+                raise ValueError(f"duplicate efficacy record: {key}")
+            seen.add(key)
 
     # ---- (de)serialization ----
 

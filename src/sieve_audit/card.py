@@ -29,7 +29,7 @@ from .verdict import (
 def _canonical_hash(obj: object) -> str:
     return hashlib.sha256(
         json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode()
-    ).hexdigest()[:16]
+    ).hexdigest()
 
 
 def scope_sentence(bundle: EvidenceBundle) -> str:
@@ -49,7 +49,7 @@ def build_card(
     cfg: AuditConfig,
     decision: Decision,
     decod: DecodabilityResult | None,
-    efficacy: EfficacyResult | None,
+    efficacy: dict[str, EfficacyResult] | None,
     controls: ControlsResult | None,
     bundle_path: str | None = None,
 ) -> AuditCard:
@@ -57,11 +57,17 @@ def build_card(
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
     bundle_hash = _canonical_hash(bundle.to_dict())
 
-    diagnostics: dict = {"decision_reasons": decision.reasons}
+    diagnostics: dict = {
+        "decision_reasons": decision.reasons,
+        # the full protocol config is part of the card: a weakened threshold
+        # can never hide behind a hash
+        "config": cfg.to_dict(),
+        "config_nondefault": cfg.nondefault_fields(),
+    }
     if decod is not None:
         diagnostics["decodability"] = decod.to_dict()
     if efficacy is not None:
-        diagnostics["efficacy"] = efficacy.to_dict()
+        diagnostics["efficacy"] = {arm: res.to_dict() for arm, res in efficacy.items()}
     if controls is not None:
         diagnostics["controls"] = controls.to_dict()
 
@@ -75,9 +81,12 @@ def build_card(
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
     risks = list(RESIDUAL_RISKS_COMMON)
-    for res in (decod, efficacy, controls):
+    for res in (decod, controls):
         if res is not None:
             risks.extend(getattr(res, "notes", []))
+    if efficacy is not None:
+        for arm, res in sorted(efficacy.items()):
+            risks.extend(f"[{arm}] {n}" for n in res.notes)
 
     return AuditCard(
         model=bundle.model,
@@ -161,13 +170,15 @@ def card_to_markdown(card: AuditCard) -> str:
             )
     eff = card.diagnostics.get("efficacy")
     if eff:
-        lines += [
-            f"- Efficacy gate: **{'passed' if eff['effective'] else 'FAILED'}** "
-            f"(hook_correct={eff['hook_correct']}, "
-            f"median rel. residual delta @|α|={eff['max_alpha']:g}: "
-            f"{eff['median_rel_delta_at_max']:.4f}, "
-            f"output changed: {eff['any_output_changed_at_max']})",
-        ]
+        for arm, e in sorted(eff.items()):
+            tag = "Efficacy gate (probe)" if arm == "probe" else f"Control-arm movement ({arm})"
+            lines.append(
+                f"- {tag}: **{'passed' if e['effective'] else 'FAILED'}** "
+                f"(hook_correct={e['hook_correct']}, "
+                f"median rel. residual delta @|α|={e['max_alpha']:g}: "
+                f"{e['median_rel_delta_at_max']:.4f}, "
+                f"output changed: {e['any_output_changed_at_max']})"
+            )
     ctrl = card.diagnostics.get("controls")
     if ctrl:
         lines.append(
@@ -188,6 +199,22 @@ def card_to_markdown(card: AuditCard) -> str:
     lines += [f"- ~~{c}~~" for c in card.disallowed_claims]
     lines += ["", "## Residual risks", ""]
     lines += [f"- {r}" for r in card.residual_risks]
+    nondefault = card.diagnostics.get("config_nondefault") or {}
+    lines += ["", "## Protocol config", ""]
+    if nondefault:
+        lines.append(
+            "- **NON-STANDARD PROTOCOL** — these thresholds deviate from the "
+            "published defaults:"
+        )
+        lines += [f"  - `{k} = {v}`" for k, v in sorted(nondefault.items())]
+    else:
+        lines.append("- standard protocol defaults (no threshold overrides)")
+    cfg_d = card.diagnostics.get("config") or {}
+    if cfg_d:
+        lines.append(
+            "- full config: "
+            + ", ".join(f"`{k}={v}`" for k, v in sorted(cfg_d.items()))
+        )
     lines += [
         "",
         "## Reproducibility",
