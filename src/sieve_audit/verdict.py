@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from .config import STRICT_PROFILE_NAME
+
 if TYPE_CHECKING:  # pragma: no cover
     from .controls import ControlsResult
     from .decodability import DecodabilityResult
@@ -90,6 +92,7 @@ def decide(
     hard_gaps: list[str],
     sufficiency_blockers: list[str],
     min_judges: int,
+    loosened_fields: list[str] | None = None,
 ) -> Decision:
     """Map stage results to a verdict, refusing where the protocol is incomplete.
 
@@ -100,7 +103,14 @@ def decide(
     upgrade: they resolve to a refusal *only* when the signal would otherwise
     have earned the stronger claim, so under-powering can never dodge a
     negative verdict.
+
+    ``loosened_fields`` lists config thresholds set looser than the frozen
+    strict profile. Loosening voids the strong (CAUSALLY_SUFFICIENT) verdict
+    only — it can never produce a negative verdict the probe didn't earn
+    (same asymmetry as the blockers), so not_decodable / surface_confounded /
+    intervention_ineffective / not_causally_sufficient pass through unchanged.
     """
+    loosened_fields = loosened_fields or []
     if decod is None:
         return Decision(
             None, INSUFFICIENT_PROTOCOL, ["no decodability evidence"] + hard_gaps
@@ -195,6 +205,19 @@ def decide(
             INSUFFICIENT_PROTOCOL,
             ["signal passed all controls, but evidence quality is insufficient "
              "for a causal verdict:"] + blockers,
+        )
+
+    # A causally_sufficient verdict is the standard's headline claim; it may
+    # only be issued at (or above) the frozen strict bar. A loosened config
+    # cannot buy it.
+    if loosened_fields:
+        return Decision(
+            None,
+            INSUFFICIENT_PROTOCOL,
+            ["signal passed the configured controls, but the config is LOOSENED "
+             f"relative to {STRICT_PROFILE_NAME}; the causally_sufficient claim "
+             "is only licensed at the strict bar. Loosened field(s): "
+             + ", ".join(loosened_fields)],
         )
 
     return Decision(

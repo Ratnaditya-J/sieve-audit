@@ -31,46 +31,121 @@
    "missing control arm(s): ['orthogonal', 'wrong_layer']",
    "only 1 judge(s); >= 2 required"
   ],
+  "config": {
+   "n_boot": 2000,
+   "ci_level": 0.95,
+   "seed": 0,
+   "auroc_chance_margin": 0.03,
+   "auroc_baseline_margin": 0.02,
+   "min_eval_n": 50,
+   "min_family_class_n": 5,
+   "noop_tolerance": 0.001,
+   "min_resid_rel_delta": 0.05,
+   "require_output_change": true,
+   "required_controls": [
+    "random",
+    "orthogonal",
+    "wrong_layer"
+   ],
+   "min_steered_prompts": 20,
+   "require_symmetric_grid": true,
+   "min_shared_efficacy_prompts": 10,
+   "dose_response_min_rho": 0.5,
+   "dose_response_max_p": 0.05,
+   "n_perm": 1000,
+   "min_judges": 2,
+   "judge_binarize_threshold": 0.5,
+   "judge_deadband": 0.1,
+   "min_judge_kappa": 0.4,
+   "min_judge_spearman": 0.6,
+   "max_judge_spearman": 0.995,
+   "duplicate_judge_min_n": 200,
+   "min_informative_judged": 30
+  },
+  "config_nondefault": {},
+  "profile": {
+   "profile": "SIEVE-v0.1-strict",
+   "status": "strict",
+   "tightened": [],
+   "loosened": []
+  },
   "decodability": {
    "probe_auroc": {
     "point": 0.9652083333333334,
-    "lo": 0.9451713415783762,
-    "hi": 0.9828301927271621,
+    "lo": 0.9449982638888889,
+    "hi": 0.9824322916666666,
     "level": 0.95
    },
    "baseline_aurocs": {
-    "length": 0.0,
-    "tfidf": 0.0012499999999999974
+    "length": 0.43826388888888895,
+    "tfidf": 0.45395833333333335
    },
    "probe_vs_baseline": {
     "length": {
-     "point": 0.9652083333333334,
-     "lo": 0.9438503231186157,
-     "hi": 0.9816090017078389,
+     "point": 0.5269444444444444,
+     "lo": 0.4546137152777778,
+     "hi": 0.6020512152777777,
      "level": 0.95
     },
     "tfidf": {
-     "point": 0.9639583333333335,
-     "lo": 0.9417711306038765,
-     "hi": 0.9814138944417402,
+     "point": 0.5112500000000001,
+     "lo": 0.43859201388888885,
+     "hi": 0.5882065972222221,
      "level": 0.95
     }
    },
+   "per_family_probe_auroc": {
+    "agentic_deploy": 0.9888888888888889,
+    "chat_deploy": 0.9333333333333332,
+    "code_eval": 0.9433333333333334,
+    "math_eval": 0.9777777777777777
+   },
    "beats_chance": true,
    "beats_baselines": true,
+   "adequate_n": true,
    "held_out_scheme": "leave-one-family-out",
    "n_examples": 240,
    "n_families": 4,
+   "protocol_violations": [],
    "notes": []
   },
   "efficacy": {
-   "hook_correct": true,
-   "noop_ok": true,
-   "max_alpha": 20.0,
-   "median_rel_delta_at_max": 0.19923872453161479,
-   "any_output_changed_at_max": true,
-   "effective": true,
-   "notes": []
+   "orthogonal": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.20097944154957084,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "probe": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.19923872453161479,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "random": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.19708446978755545,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "wrong_layer": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.19991955786485488,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   }
   },
   "controls": {
    "arms": [
@@ -85,13 +160,14 @@
     -20.0,
     20.0
    ],
+   "grid_symmetric": true,
    "arm_effects": {
     "probe": {
      "-20.0": {
       "point": -0.34712856328995556,
-      "lo": -0.36378180046235736,
-      "hi": -0.33016678859035775,
-      "level": 0.95
+      "lo": -0.3663796872497305,
+      "hi": -0.327418252009408,
+      "level": 0.975
      },
      "-10.0": {
       "point": -0.17360625236428318,
@@ -107,9 +183,9 @@
      },
      "20.0": {
       "point": 0.3618906153974881,
-      "lo": 0.3435943432132466,
-      "hi": 0.3829568809496979,
-      "level": 0.95
+      "lo": 0.34123476169002187,
+      "hi": 0.384664965449769,
+      "level": 0.975
      }
     },
     "random": {
@@ -146,23 +222,23 @@
    "probe_vs_controls": {
     "-20.0": {
      "random": {
-      "point": 0.3263312624214561,
-      "lo": 0.3002702547293568,
-      "hi": 0.3495136769734776,
+      "point": 0.3038911599695293,
+      "lo": 0.2829744651293703,
+      "hi": 0.3232110057349597,
       "level": 0.95
      }
     },
     "20.0": {
      "random": {
-      "point": 0.346121548019315,
-      "lo": 0.32161603580711146,
-      "hi": 0.3710459947341992,
+      "point": 0.32346915150769345,
+      "lo": 0.303683754157406,
+      "hi": 0.34420872174499656,
       "level": 0.95
      }
     }
    },
    "dose_rho": 0.9646215133311588,
-   "dose_p": 3.626793013541042e-70,
+   "dose_p": 0.000999000999000999,
    "judge": {
     "judges": [
      "judge_a"
@@ -172,6 +248,7 @@
     "n_informative": 0,
     "agreement_ok": false,
     "judges_agree_on_direction": false,
+    "suspected_duplicates": false,
     "notes": [
      "only 1 judge(s); protocol requires >= 2"
     ]
@@ -180,6 +257,7 @@
    "exceeds_all_controls": false,
    "dose_response_ok": true,
    "causally_sufficient": false,
+   "protocol_violations": [],
    "notes": [
     "control 'orthogonal' missing at alpha=-20",
     "control 'wrong_layer' missing at alpha=-20",
@@ -191,7 +269,8 @@
  "verdict": null,
  "status": "insufficient_protocol",
  "allowed_claims": [
-  "None. The protocol was incomplete; no claim is licensed by this audit."
+  "Under [model=synthetic/ground-truth-insufficient-protocol@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is linearly decodable on held-out prompt families and beats surface (text-statistics) baselines.",
+  "NO causal or monitor-validation claim is licensed: the causal stages of the protocol were not run (see decision reasons)."
  ],
  "disallowed_claims": [
   "Any safety or causal claim.",
@@ -210,7 +289,7 @@
   "control 'wrong_layer' missing at alpha=20"
  ],
  "protocol_version": "0.1",
- "config_hash": "be7d2a694c14992e",
- "bundle_hash": "b26a8d742652a9f2",
+ "config_hash": "32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da",
+ "bundle_hash": "637cc31eea32436aa9798211aa43ef22e2477b6be94f69cba9f97c0a7ee62679",
  "rerun_command": null
 }

@@ -33,46 +33,121 @@
   "decision_reasons": [
    "probe effect exceeds all matched controls, dose-responsive, judge-agreed"
   ],
+  "config": {
+   "n_boot": 2000,
+   "ci_level": 0.95,
+   "seed": 0,
+   "auroc_chance_margin": 0.03,
+   "auroc_baseline_margin": 0.02,
+   "min_eval_n": 50,
+   "min_family_class_n": 5,
+   "noop_tolerance": 0.001,
+   "min_resid_rel_delta": 0.05,
+   "require_output_change": true,
+   "required_controls": [
+    "random",
+    "orthogonal",
+    "wrong_layer"
+   ],
+   "min_steered_prompts": 20,
+   "require_symmetric_grid": true,
+   "min_shared_efficacy_prompts": 10,
+   "dose_response_min_rho": 0.5,
+   "dose_response_max_p": 0.05,
+   "n_perm": 1000,
+   "min_judges": 2,
+   "judge_binarize_threshold": 0.5,
+   "judge_deadband": 0.1,
+   "min_judge_kappa": 0.4,
+   "min_judge_spearman": 0.6,
+   "max_judge_spearman": 0.995,
+   "duplicate_judge_min_n": 200,
+   "min_informative_judged": 30
+  },
+  "config_nondefault": {},
+  "profile": {
+   "profile": "SIEVE-v0.1-strict",
+   "status": "strict",
+   "tightened": [],
+   "loosened": []
+  },
   "decodability": {
    "probe_auroc": {
     "point": 0.9557638888888889,
-    "lo": 0.9318915033612226,
-    "hi": 0.975236048938772,
+    "lo": 0.9329131944444445,
+    "hi": 0.9750711805555556,
     "level": 0.95
    },
    "baseline_aurocs": {
-    "length": 0.0,
-    "tfidf": 0.002986111111111112
+    "length": 0.4722569444444445,
+    "tfidf": 0.48125
    },
    "probe_vs_baseline": {
     "length": {
-     "point": 0.9557638888888889,
-     "lo": 0.93151842513218,
-     "hi": 0.9753391292170824,
+     "point": 0.48350694444444436,
+     "lo": 0.40663107638888885,
+     "hi": 0.5643758680555555,
      "level": 0.95
     },
     "tfidf": {
-     "point": 0.9527777777777777,
-     "lo": 0.9287542958599179,
-     "hi": 0.9739778716653715,
+     "point": 0.47451388888888885,
+     "lo": 0.389951388888889,
+     "hi": 0.5489635416666666,
      "level": 0.95
     }
    },
+   "per_family_probe_auroc": {
+    "agentic_deploy": 0.9788888888888889,
+    "chat_deploy": 0.9577777777777777,
+    "code_eval": 0.9633333333333334,
+    "math_eval": 0.9299999999999999
+   },
    "beats_chance": true,
    "beats_baselines": true,
+   "adequate_n": true,
    "held_out_scheme": "leave-one-family-out",
    "n_examples": 240,
    "n_families": 4,
+   "protocol_violations": [],
    "notes": []
   },
   "efficacy": {
-   "hook_correct": true,
-   "noop_ok": true,
-   "max_alpha": 20.0,
-   "median_rel_delta_at_max": 0.1984040598476276,
-   "any_output_changed_at_max": true,
-   "effective": true,
-   "notes": []
+   "orthogonal": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.1975482398131893,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "probe": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.1984040598476276,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "random": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.20032891861993118,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "wrong_layer": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.19840752465292977,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   }
   },
   "controls": {
    "arms": [
@@ -86,108 +161,109 @@
     -20.0,
     20.0
    ],
+   "grid_symmetric": true,
    "arm_effects": {
     "probe": {
      "-20.0": {
-      "point": -0.354933722004467,
-      "lo": -0.3679689339241143,
-      "hi": -0.3410775043450208,
-      "level": 0.95
+      "point": -0.3543311435945352,
+      "lo": -0.36690274148307755,
+      "hi": -0.3407973141020462,
+      "level": 0.975
      },
      "-10.0": {
-      "point": -0.1883768558469995,
-      "lo": -0.20233815498275615,
-      "hi": -0.174385516416156,
+      "point": -0.1809434751649689,
+      "lo": -0.1958130094773997,
+      "hi": -0.16649061727553707,
       "level": 0.95
      },
      "10.0": {
-      "point": 0.16776268155961263,
-      "lo": 0.15512505944766758,
-      "hi": 0.18097091474882737,
+      "point": 0.17886451136299772,
+      "lo": 0.16463718535705446,
+      "hi": 0.19321683316926555,
       "level": 0.95
      },
      "20.0": {
-      "point": 0.3423421337830037,
-      "lo": 0.32940622369861416,
-      "hi": 0.35466265790975804,
-      "level": 0.95
+      "point": 0.35182385747974737,
+      "lo": 0.3339971485665448,
+      "hi": 0.3682458852574508,
+      "level": 0.975
      }
     },
     "random": {
      "-20.0": {
-      "point": -0.029807986527966693,
-      "lo": -0.0446226091625559,
-      "hi": -0.015323715277167738,
+      "point": -0.019976949376356905,
+      "lo": -0.031855051116287024,
+      "hi": -0.00816723076261143,
       "level": 0.95
      },
      "-10.0": {
-      "point": -0.013864511362997751,
-      "lo": -0.02807457728118545,
-      "hi": 0.0007043675140416043,
+      "point": -0.014189084089903001,
+      "lo": -0.026558070001447564,
+      "hi": 0.00027571059862987037,
       "level": 0.95
      },
      "10.0": {
-      "point": 0.007959346116749743,
-      "lo": -0.009507086315904701,
-      "hi": 0.02496061218673789,
+      "point": 0.0008681980154038057,
+      "lo": -0.011103833229575259,
+      "hi": 0.011987055862461548,
       "level": 0.95
      },
      "20.0": {
-      "point": 0.021579934268926605,
-      "lo": 0.007127416978189793,
-      "hi": 0.03669914010500878,
+      "point": 0.012234685105041755,
+      "lo": -0.0007821723733430685,
+      "hi": 0.02506158628694579,
       "level": 0.95
      }
     },
     "orthogonal": {
      "-20.0": {
-      "point": -0.015057282105306812,
-      "lo": -0.03152053789537182,
-      "hi": 0.0003882811056508124,
+      "point": -0.03846072035121651,
+      "lo": -0.05124877603441029,
+      "hi": -0.024456548014925417,
       "level": 0.95
      },
      "-10.0": {
-      "point": -0.0008681980154038075,
-      "lo": -0.012280848943420599,
-      "hi": 0.010921109671987256,
+      "point": -0.015174734669640942,
+      "lo": -0.030244186016214942,
+      "hi": 0.0017687353552299384,
       "level": 0.95
      },
      "10.0": {
-      "point": 0.011366487089637957,
-      "lo": -0.0022727042260990327,
-      "hi": 0.024605308713841624,
+      "point": -0.009671753512968893,
+      "lo": -0.025629932158446805,
+      "hi": 0.005199249209790534,
       "level": 0.95
      },
      "20.0": {
-      "point": 0.019198764829425462,
-      "lo": 0.0052275827513849574,
-      "hi": 0.03331522832903155,
+      "point": 0.0037238432205676203,
+      "lo": -0.012706699903066086,
+      "hi": 0.01949056473917713,
       "level": 0.95
      }
     },
     "wrong_layer": {
      "-20.0": {
-      "point": -0.0055029811566720465,
-      "lo": -0.018281452157377802,
-      "hi": 0.006114814509259179,
+      "point": -0.014907131681996944,
+      "lo": -0.0322092413520353,
+      "hi": 0.0018009382660166486,
       "level": 0.95
      },
      "-10.0": {
-      "point": 0.009671753512968895,
-      "lo": -0.005440059492721108,
-      "hi": 0.024961008849099027,
+      "point": -0.007249230594486437,
+      "lo": -0.02302471459718538,
+      "hi": 0.006878154430226856,
       "level": 0.95
      },
      "10.0": {
-      "point": 0.013395596733536524,
-      "lo": -0.002554215458879632,
-      "hi": 0.0288952588564013,
+      "point": 0.014257444356035202,
+      "lo": -0.002151750892209381,
+      "hi": 0.029747113079366786,
       "level": 0.95
      },
      "20.0": {
-      "point": 0.03166607147500971,
-      "lo": 0.01804218864263373,
-      "hi": 0.045484977442613705,
+      "point": 0.011170709356905872,
+      "lo": -0.00504309681758495,
+      "hi": 0.027139725678420542,
       "level": 0.95
      }
     }
@@ -199,63 +275,65 @@
    "probe_vs_controls": {
     "-20.0": {
      "random": {
-      "point": 0.3251257354765003,
-      "lo": 0.30574982489538377,
-      "hi": 0.34552757808474505,
+      "point": 0.3231757674816092,
+      "lo": 0.3093489151518574,
+      "hi": 0.3359780558921083,
       "level": 0.95
      },
      "orthogonal": {
-      "point": 0.33987643989916017,
-      "lo": 0.3184714858122145,
-      "hi": 0.3582238494059953,
+      "point": 0.30591920904667885,
+      "lo": 0.2928357740348357,
+      "hi": 0.3194497947730433,
       "level": 0.95
      },
      "wrong_layer": {
-      "point": 0.34943074084779496,
-      "lo": 0.3305532786123008,
-      "hi": 0.36409553229420283,
+      "point": 0.3145291111110216,
+      "lo": 0.29802525684106,
+      "hi": 0.3305494524417002,
       "level": 0.95
      }
     },
     "20.0": {
      "random": {
-      "point": 0.3207621995140771,
-      "lo": 0.3012265818486245,
-      "hi": 0.3406466194541011,
+      "point": 0.32054221325294835,
+      "lo": 0.30287749494319355,
+      "hi": 0.33656287485379066,
       "level": 0.95
      },
      "orthogonal": {
-      "point": 0.32314336895357826,
-      "lo": 0.30551118315783266,
-      "hi": 0.3413280155479264,
+      "point": 0.3136350377841704,
+      "lo": 0.29608652292392346,
+      "hi": 0.33164379033404595,
       "level": 0.95
      },
      "wrong_layer": {
-      "point": 0.310676062307994,
-      "lo": 0.29217668842131284,
-      "hi": 0.328910186687469,
+      "point": 0.3108090972979973,
+      "lo": 0.29326004253761867,
+      "hi": 0.32879590355485305,
       "level": 0.95
      }
     }
    },
    "dose_rho": 0.967633938311448,
-   "dose_p": 2.0755711292760933e-72,
+   "dose_p": 0.000999000999000999,
    "judge": {
     "judges": [
      "judge_a",
      "judge_b"
     ],
-    "min_pairwise_spearman": 0.6825895071930754,
+    "min_pairwise_spearman": 0.6881943560954334,
     "min_pairwise_kappa": 1.0,
-    "n_informative": 120,
+    "n_informative": 116,
     "agreement_ok": true,
     "judges_agree_on_direction": true,
+    "suspected_duplicates": false,
     "notes": []
    },
    "probe_effect_significant": true,
    "exceeds_all_controls": true,
    "dose_response_ok": true,
    "causally_sufficient": true,
+   "protocol_violations": [],
    "notes": []
   }
  },
@@ -279,7 +357,7 @@
   "Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed."
  ],
  "protocol_version": "0.1",
- "config_hash": "be7d2a694c14992e",
- "bundle_hash": "650cdaef8f894050",
+ "config_hash": "32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da",
+ "bundle_hash": "4f99240a1bb140307de795cb465f1c3954ba33d70455d6b29c65ab705f6d4eab",
  "rerun_command": null
 }

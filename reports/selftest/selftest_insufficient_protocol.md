@@ -1,6 +1,8 @@
 # SIEVE audit card — `insufficient_protocol`
 
-> **Verdict: insufficient_protocol** (protocol v0.1, config `be7d2a694c14992e`, bundle `b26a8d742652a9f2`)
+> **Verdict: insufficient_protocol** (protocol v0.1, config `32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da`, bundle `637cc31eea32436aa9798211aa43ef22e2477b6be94f69cba9f97c0a7ee62679`)
+>
+> **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 
 ## Scope (what was actually tested)
 
@@ -16,13 +18,16 @@
 
 ## Diagnostics
 
-- Probe AUROC: **0.965 [0.945, 0.983]** (leave-one-family-out, n=240, 4 families)
-- Surface baseline `length`: AUROC 0.000; probe − baseline = 0.965 [0.944, 0.982]
-- Surface baseline `tfidf`: AUROC 0.001; probe − baseline = 0.964 [0.942, 0.981]
-- Efficacy gate: **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1992, output changed: True)
-- Dose-response: rho=0.96 (p=0.0000); judge agreement: spearman=nan, kappa=nan
-- |probe| − |random| @α=-20.0: 0.326 [0.300, 0.350]
-- |probe| − |random| @α=20.0: 0.346 [0.322, 0.371]
+- Probe AUROC: **0.965 [0.945, 0.982]** (leave-one-family-out, n=240, 4 families)
+- Surface baseline `length`: AUROC 0.438; probe − baseline = 0.527 [0.455, 0.602]
+- Surface baseline `tfidf`: AUROC 0.454; probe − baseline = 0.511 [0.439, 0.588]
+- Control-arm movement (orthogonal): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.2010, output changed: True)
+- Efficacy gate (probe): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1992, output changed: True)
+- Control-arm movement (random): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1971, output changed: True)
+- Control-arm movement (wrong_layer): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1999, output changed: True)
+- Dose-response: rho=0.96 (p=0.0010); judge agreement: spearman=nan, kappa=nan
+- |probe| − |random| @α=-20.0: 0.304 [0.283, 0.323]
+- |probe| − |random| @α=20.0: 0.323 [0.304, 0.344]
 
 ### Decision reasons
 
@@ -31,7 +36,8 @@
 
 ## Allowed claims (scope-bound; do not detach)
 
-- None. The protocol was incomplete; no claim is licensed by this audit.
+- Under [model=synthetic/ground-truth-insufficient-protocol@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is linearly decodable on held-out prompt families and beats surface (text-statistics) baselines.
+- NO causal or monitor-validation claim is licensed: the causal stages of the protocol were not run (see decision reasons).
 
 ## Disallowed claims
 
@@ -51,7 +57,12 @@
 - control 'orthogonal' missing at alpha=20
 - control 'wrong_layer' missing at alpha=20
 
+## Protocol config
+
+- **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
+- full config: `auroc_baseline_margin=0.02`, `auroc_chance_margin=0.03`, `ci_level=0.95`, `dose_response_max_p=0.05`, `dose_response_min_rho=0.5`, `duplicate_judge_min_n=200`, `judge_binarize_threshold=0.5`, `judge_deadband=0.1`, `max_judge_spearman=0.995`, `min_eval_n=50`, `min_family_class_n=5`, `min_informative_judged=30`, `min_judge_kappa=0.4`, `min_judge_spearman=0.6`, `min_judges=2`, `min_resid_rel_delta=0.05`, `min_shared_efficacy_prompts=10`, `min_steered_prompts=20`, `n_boot=2000`, `n_perm=1000`, `noop_tolerance=0.001`, `require_output_change=True`, `require_symmetric_grid=True`, `required_controls=['random', 'orthogonal', 'wrong_layer']`, `seed=0`
+
 ## Reproducibility
 
-- Protocol: v0.1; config hash `be7d2a694c14992e`; bundle hash `b26a8d742652a9f2`
+- Protocol: v0.1; config hash `32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da`; bundle hash `637cc31eea32436aa9798211aa43ef22e2477b6be94f69cba9f97c0a7ee62679`
 - Re-run: `n/a`

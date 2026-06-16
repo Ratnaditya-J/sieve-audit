@@ -33,46 +33,121 @@
   "decision_reasons": [
    "probe AUROC not above chance on held-out examples"
   ],
+  "config": {
+   "n_boot": 2000,
+   "ci_level": 0.95,
+   "seed": 0,
+   "auroc_chance_margin": 0.03,
+   "auroc_baseline_margin": 0.02,
+   "min_eval_n": 50,
+   "min_family_class_n": 5,
+   "noop_tolerance": 0.001,
+   "min_resid_rel_delta": 0.05,
+   "require_output_change": true,
+   "required_controls": [
+    "random",
+    "orthogonal",
+    "wrong_layer"
+   ],
+   "min_steered_prompts": 20,
+   "require_symmetric_grid": true,
+   "min_shared_efficacy_prompts": 10,
+   "dose_response_min_rho": 0.5,
+   "dose_response_max_p": 0.05,
+   "n_perm": 1000,
+   "min_judges": 2,
+   "judge_binarize_threshold": 0.5,
+   "judge_deadband": 0.1,
+   "min_judge_kappa": 0.4,
+   "min_judge_spearman": 0.6,
+   "max_judge_spearman": 0.995,
+   "duplicate_judge_min_n": 200,
+   "min_informative_judged": 30
+  },
+  "config_nondefault": {},
+  "profile": {
+   "profile": "SIEVE-v0.1-strict",
+   "status": "strict",
+   "tightened": [],
+   "loosened": []
+  },
   "decodability": {
    "probe_auroc": {
     "point": 0.4796527777777778,
-    "lo": 0.4074656154487358,
-    "hi": 0.5512492480341986,
+    "lo": 0.40734375000000006,
+    "hi": 0.5495156250000001,
     "level": 0.95
    },
    "baseline_aurocs": {
-    "length": 0.0,
-    "tfidf": 0.002986111111111112
+    "length": 0.4722569444444445,
+    "tfidf": 0.48125
    },
    "probe_vs_baseline": {
     "length": {
-     "point": 0.4796527777777778,
-     "lo": 0.406522619028197,
-     "hi": 0.5518384566371913,
+     "point": 0.007395833333333324,
+     "lo": -0.10390017361111095,
+     "hi": 0.11674218749999996,
      "level": 0.95
     },
     "tfidf": {
-     "point": 0.4766666666666667,
-     "lo": 0.39889556869302106,
-     "hi": 0.5503344136607937,
+     "point": -0.0015972222222221943,
+     "lo": -0.11785069444444449,
+     "hi": 0.10542708333333327,
      "level": 0.95
     }
    },
+   "per_family_probe_auroc": {
+    "agentic_deploy": 0.5444444444444444,
+    "chat_deploy": 0.4555555555555556,
+    "code_eval": 0.5066666666666667,
+    "math_eval": 0.42000000000000004
+   },
    "beats_chance": false,
-   "beats_baselines": true,
+   "beats_baselines": false,
+   "adequate_n": true,
    "held_out_scheme": "leave-one-family-out",
    "n_examples": 240,
    "n_families": 4,
+   "protocol_violations": [],
    "notes": []
   },
   "efficacy": {
-   "hook_correct": true,
-   "noop_ok": true,
-   "max_alpha": 20.0,
-   "median_rel_delta_at_max": 0.1984040598476276,
-   "any_output_changed_at_max": true,
-   "effective": true,
-   "notes": []
+   "orthogonal": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.1975482398131893,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "probe": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.1984040598476276,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "random": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.20032891861993118,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   },
+   "wrong_layer": {
+    "hook_correct": true,
+    "noop_ok": true,
+    "max_alpha": 20.0,
+    "median_rel_delta_at_max": 0.19840752465292977,
+    "any_output_changed_at_max": true,
+    "effective": true,
+    "notes": []
+   }
   },
   "controls": {
    "arms": [
@@ -86,129 +161,171 @@
     -20.0,
     20.0
    ],
+   "grid_symmetric": true,
    "arm_effects": {
     "probe": {
      "-20.0": {
-      "point": -0.004933722004467013,
-      "lo": -0.017968933924114285,
-      "hi": 0.008922495654979146,
-      "level": 0.95
+      "point": -0.004331143594535177,
+      "lo": -0.01690274148307757,
+      "hi": 0.009202685897953785,
+      "level": 0.975
      },
      "-10.0": {
-      "point": -0.013376855846999516,
-      "lo": -0.027338154982756158,
-      "hi": 0.0006144835838439885,
+      "point": -0.005943475164968931,
+      "lo": -0.020813009477399672,
+      "hi": 0.008509382724462953,
       "level": 0.95
      },
      "10.0": {
-      "point": -0.0072373184403873485,
-      "lo": -0.01987494055233241,
-      "hi": 0.005970914748827317,
+      "point": 0.003864511362997743,
+      "lo": -0.010362814642945545,
+      "hi": 0.018216833169265596,
       "level": 0.95
      },
      "20.0": {
-      "point": -0.007657866216996295,
-      "lo": -0.020593776301385754,
-      "hi": 0.004662657909758039,
-      "level": 0.95
+      "point": 0.0018238574797474704,
+      "lo": -0.016002851433455208,
+      "hi": 0.018245885257450762,
+      "level": 0.975
      }
     },
     "random": {
      "-20.0": {
-      "point": -0.009807986527966673,
-      "lo": -0.024622609162555886,
-      "hi": 0.004676284722832286,
+      "point": 2.3050623643117164e-05,
+      "lo": -0.011855051116286998,
+      "hi": 0.011832769237388603,
       "level": 0.95
      },
      "-10.0": {
-      "point": -0.003864511362997743,
-      "lo": -0.018074577281185434,
-      "hi": 0.010704367514041612,
+      "point": -0.004189084089902991,
+      "lo": -0.016558070001447565,
+      "hi": 0.010275710598629886,
       "level": 0.95
      },
      "10.0": {
-      "point": -0.0020406538832502727,
-      "lo": -0.01950708631590472,
-      "hi": 0.014960612186737873,
+      "point": -0.0091318019845962,
+      "lo": -0.021103833229575257,
+      "hi": 0.0019870558624615433,
       "level": 0.95
      },
      "20.0": {
-      "point": 0.0015799342689265972,
-      "lo": -0.012872583021810222,
-      "hi": 0.01669914010500877,
+      "point": -0.00776531489495825,
+      "lo": -0.020782172373343063,
+      "hi": 0.005061586286945776,
       "level": 0.95
      }
     },
     "orthogonal": {
      "-20.0": {
-      "point": 0.0049427178946932085,
-      "lo": -0.011520537895371807,
-      "hi": 0.020388281105650833,
+      "point": -0.0184607203512165,
+      "lo": -0.031248776034410283,
+      "hi": -0.0044565480149254015,
       "level": 0.95
      },
      "-10.0": {
-      "point": 0.0091318019845962,
-      "lo": -0.0022808489434205936,
-      "hi": 0.020921109671987265,
+      "point": -0.005174734669640927,
+      "lo": -0.020244186016214933,
+      "hi": 0.011768735355229954,
       "level": 0.95
      },
      "10.0": {
-      "point": 0.0013664870896379503,
-      "lo": -0.012272704226099048,
-      "hi": 0.014605308713841615,
+      "point": -0.019671753512968897,
+      "lo": -0.03562993215844682,
+      "hi": -0.004800750790209466,
       "level": 0.95
      },
      "20.0": {
-      "point": -0.0008012351705745509,
-      "lo": -0.014772417248615053,
-      "hi": 0.013315228329031531,
+      "point": -0.016276156779432383,
+      "lo": -0.03270669990306609,
+      "hi": -0.0005094352608228672,
       "level": 0.95
      }
     },
     "wrong_layer": {
      "-20.0": {
-      "point": 0.01449701884332797,
-      "lo": 0.0017185478426222105,
-      "hi": 0.026114814509259197,
+      "point": 0.005092868318003072,
+      "lo": -0.012209241352035282,
+      "hi": 0.021800938266016662,
       "level": 0.95
      },
      "-10.0": {
-      "point": 0.019671753512968897,
-      "lo": 0.004559940507278899,
-      "hi": 0.03496100884909904,
+      "point": 0.002750769405513574,
+      "lo": -0.01302471459718537,
+      "hi": 0.01687815443022687,
       "level": 0.95
      },
      "10.0": {
-      "point": 0.003395596733536514,
-      "lo": -0.012554215458879643,
-      "hi": 0.018895258856401285,
+      "point": 0.004257444356035202,
+      "lo": -0.01215175089220938,
+      "hi": 0.019747113079366788,
       "level": 0.95
      },
      "20.0": {
-      "point": 0.011666071475009704,
-      "lo": -0.0019578113573662757,
-      "hi": 0.025484977442613698,
+      "point": -0.008829290643094139,
+      "lo": -0.02504309681758496,
+      "hi": 0.007139725678420523,
       "level": 0.95
      }
     }
    },
    "significant_probe_alphas": [],
-   "probe_vs_controls": {},
-   "dose_rho": 0.005379330321944896,
-   "dose_p": 0.9535007166928303,
+   "probe_vs_controls": {
+    "-20.0": {
+     "random": {
+      "point": -0.0001254405627672095,
+      "lo": -0.008551440801318368,
+      "hi": 0.008237654474328268,
+      "level": 0.95
+     },
+     "orthogonal": {
+      "point": -0.007130703013906415,
+      "lo": -0.017067211694911474,
+      "hi": 0.002857999106467576,
+      "level": 0.95
+     },
+     "wrong_layer": {
+      "point": -0.009829983386450938,
+      "lo": -0.02437761065606672,
+      "hi": 0.004625494271541617,
+      "level": 0.95
+     }
+    },
+    "20.0": {
+     "random": {
+      "point": -0.001660049626334888,
+      "lo": -0.014273636908830292,
+      "hi": 0.011928080578475088,
+      "level": 0.95
+     },
+     "orthogonal": {
+      "point": -0.006688259434969621,
+      "lo": -0.0215329415711898,
+      "hi": 0.007767475656482846,
+      "level": 0.95
+     },
+     "wrong_layer": {
+      "point": -0.00854334854681249,
+      "lo": -0.022954800374215444,
+      "hi": 0.006951910695175813,
+      "level": 0.95
+     }
+    }
+   },
+   "dose_rho": 0.10263762254270861,
+   "dose_p": 0.15084915084915085,
    "judge": {
     "judges": [
      "judge_a",
      "judge_b"
     ],
-    "min_pairwise_spearman": 0.30496190267195183,
+    "min_pairwise_spearman": 0.29820049500137497,
     "min_pairwise_kappa": NaN,
     "n_informative": 0,
     "agreement_ok": false,
     "judges_agree_on_direction": false,
+    "suspected_duplicates": false,
     "notes": [
-     "no judged record outside the deadband; kappa not computable",
-     "judge agreement failed (min spearman 0.30 vs >= 0.6; min kappa nan on 0 informative records vs >= 0.4)",
+     "only 0 records outside the judge deadband (< 30): binarized agreement not assessable",
      "judges disagree on probe effect direction at alpha=20"
     ]
    },
@@ -216,6 +333,7 @@
    "exceeds_all_controls": false,
    "dose_response_ok": false,
    "causally_sufficient": false,
+   "protocol_violations": [],
    "notes": []
   }
  },
@@ -237,7 +355,7 @@
   "Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed."
  ],
  "protocol_version": "0.1",
- "config_hash": "be7d2a694c14992e",
- "bundle_hash": "825fd2424792b1fb",
+ "config_hash": "32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da",
+ "bundle_hash": "6d7b0f572d971ef86c8ee85b96442959139b79cdc0ae9167baed6a91325fdcb2",
  "rerun_command": null
 }

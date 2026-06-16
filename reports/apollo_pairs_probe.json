@@ -52,6 +52,12 @@
    "min_informative_judged": 30
   },
   "config_nondefault": {},
+  "profile": {
+   "profile": "SIEVE-v0.1-strict",
+   "status": "strict",
+   "tightened": [],
+   "loosened": []
+  },
   "decodability": {
    "probe_auroc": {
     "point": 0.7981857541089219,

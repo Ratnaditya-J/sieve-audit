@@ -57,12 +57,14 @@ def build_card(
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
     bundle_hash = _canonical_hash(bundle.to_dict())
 
+    profile = cfg.profile_status()
     diagnostics: dict = {
         "decision_reasons": decision.reasons,
         # the full protocol config is part of the card: a weakened threshold
         # can never hide behind a hash
         "config": cfg.to_dict(),
         "config_nondefault": cfg.nondefault_fields(),
+        "profile": profile,
     }
     if decod is not None:
         diagnostics["decodability"] = decod.to_dict()
@@ -76,12 +78,15 @@ def build_card(
         disallowed = DISALLOWED_CLAIMS[decision.verdict] + DISALLOWED_CLAIMS_ALWAYS
     else:
         # protocol incomplete: no causal claim — but a cleanly-passed
-        # decodability stage still licenses its own (correlational) claims
+        # decodability stage still licenses its own (correlational) claims,
+        # and only at the strict bar (a loosened margin could have produced
+        # the "beats baselines" pass unjustly)
         decod_clean = (
             decod is not None
             and decod.beats_chance
             and decod.beats_baselines
             and not decod.protocol_violations
+            and profile["status"] != "loosened"
         )
         if decod_clean:
             allowed = [
@@ -97,6 +102,13 @@ def build_card(
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
     risks = list(RESIDUAL_RISKS_COMMON)
+    if profile["status"] == "loosened":
+        risks.insert(
+            0,
+            "Config is LOOSENED relative to the frozen standard "
+            f"({profile['profile']}); positive sub-claims are not licensed at "
+            f"the standard bar. Loosened field(s): {profile['loosened']}.",
+        )
     for res in (decod, controls):
         if res is not None:
             risks.extend(getattr(res, "notes", []))
@@ -147,6 +159,26 @@ def _fmt_ci(d: dict) -> str:
     return f"{d['point']:.3f} [{d['lo']:.3f}, {d['hi']:.3f}]"
 
 
+_PROFILE_BADGE = {
+    "strict": "✅ {name} (the standard bar)",
+    "stricter": "✅ stricter than {name}",
+    "loosened": "⚠️ CUSTOM — LOOSENED below {name} (positive verdicts void)",
+}
+
+
+def _profile_line(card: AuditCard) -> str:
+    profile = card.diagnostics.get("profile") or {}
+    status = profile.get("status", "strict")
+    name = profile.get("profile", "SIEVE-v0.1-strict")
+    badge = _PROFILE_BADGE.get(status, status).format(name=name)
+    extra = ""
+    if status == "loosened" and profile.get("loosened"):
+        extra = f" — loosened: {', '.join(profile['loosened'])}"
+    elif status == "stricter" and profile.get("tightened"):
+        extra = f" — tightened: {', '.join(profile['tightened'])}"
+    return f"**Profile:** {badge}{extra}"
+
+
 def card_to_markdown(card: AuditCard) -> str:
     verdict_str = card.verdict.value if card.verdict else card.status
     lines = [
@@ -154,6 +186,8 @@ def card_to_markdown(card: AuditCard) -> str:
         "",
         f"> **Verdict: {verdict_str}** (protocol v{card.protocol_version}, "
         f"config `{card.config_hash}`, bundle `{card.bundle_hash}`)",
+        ">",
+        f"> {_profile_line(card)}",
         "",
         "## Scope (what was actually tested)",
         "",
@@ -215,16 +249,23 @@ def card_to_markdown(card: AuditCard) -> str:
     lines += [f"- ~~{c}~~" for c in card.disallowed_claims]
     lines += ["", "## Residual risks", ""]
     lines += [f"- {r}" for r in card.residual_risks]
+    profile = card.diagnostics.get("profile") or {}
     nondefault = card.diagnostics.get("config_nondefault") or {}
-    lines += ["", "## Protocol config", ""]
-    if nondefault:
+    lines += ["", "## Protocol config", "", f"- {_profile_line(card)}"]
+    if profile.get("status") == "loosened":
         lines.append(
-            "- **NON-STANDARD PROTOCOL** — these thresholds deviate from the "
-            "published defaults:"
+            "  - A loosened config voids `causally_sufficient` and positive "
+            "decodability claims; only the strict bar licenses them."
         )
-        lines += [f"  - `{k} = {v}`" for k, v in sorted(nondefault.items())]
-    else:
-        lines.append("- standard protocol defaults (no threshold overrides)")
+    if nondefault:
+        lines.append("- threshold overrides vs the strict profile:")
+        for k, v in sorted(nondefault.items()):
+            tag = ""
+            if k in profile.get("loosened", []):
+                tag = "  ⚠️ LOOSER"
+            elif k in profile.get("tightened", []):
+                tag = "  (stricter)"
+            lines.append(f"  - `{k} = {v}`{tag}")
     cfg_d = card.diagnostics.get("config") or {}
     if cfg_d:
         lines.append(

@@ -1,6 +1,8 @@
 # SIEVE audit card — `causally_sufficient`
 
-> **Verdict: causally_sufficient** (protocol v0.1, config `be7d2a694c14992e`, bundle `650cdaef8f894050`)
+> **Verdict: causally_sufficient** (protocol v0.1, config `32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da`, bundle `4f99240a1bb140307de795cb465f1c3954ba33d70455d6b29c65ab705f6d4eab`)
+>
+> **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 
 ## Scope (what was actually tested)
 
@@ -16,17 +18,20 @@
 
 ## Diagnostics
 
-- Probe AUROC: **0.956 [0.932, 0.975]** (leave-one-family-out, n=240, 4 families)
-- Surface baseline `length`: AUROC 0.000; probe − baseline = 0.956 [0.932, 0.975]
-- Surface baseline `tfidf`: AUROC 0.003; probe − baseline = 0.953 [0.929, 0.974]
-- Efficacy gate: **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1984, output changed: True)
-- Dose-response: rho=0.97 (p=0.0000); judge agreement: spearman=0.68, kappa=1.00
-- |probe| − |random| @α=-20.0: 0.325 [0.306, 0.346]
-- |probe| − |orthogonal| @α=-20.0: 0.340 [0.318, 0.358]
-- |probe| − |wrong_layer| @α=-20.0: 0.349 [0.331, 0.364]
-- |probe| − |random| @α=20.0: 0.321 [0.301, 0.341]
-- |probe| − |orthogonal| @α=20.0: 0.323 [0.306, 0.341]
-- |probe| − |wrong_layer| @α=20.0: 0.311 [0.292, 0.329]
+- Probe AUROC: **0.956 [0.933, 0.975]** (leave-one-family-out, n=240, 4 families)
+- Surface baseline `length`: AUROC 0.472; probe − baseline = 0.484 [0.407, 0.564]
+- Surface baseline `tfidf`: AUROC 0.481; probe − baseline = 0.475 [0.390, 0.549]
+- Control-arm movement (orthogonal): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1975, output changed: True)
+- Efficacy gate (probe): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1984, output changed: True)
+- Control-arm movement (random): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.2003, output changed: True)
+- Control-arm movement (wrong_layer): **passed** (hook_correct=True, median rel. residual delta @|α|=20: 0.1984, output changed: True)
+- Dose-response: rho=0.97 (p=0.0010); judge agreement: spearman=0.69, kappa=1.00
+- |probe| − |random| @α=-20.0: 0.323 [0.309, 0.336]
+- |probe| − |orthogonal| @α=-20.0: 0.306 [0.293, 0.319]
+- |probe| − |wrong_layer| @α=-20.0: 0.315 [0.298, 0.331]
+- |probe| − |random| @α=20.0: 0.321 [0.303, 0.337]
+- |probe| − |orthogonal| @α=20.0: 0.314 [0.296, 0.332]
+- |probe| − |wrong_layer| @α=20.0: 0.311 [0.293, 0.329]
 
 ### Decision reasons
 
@@ -52,7 +57,12 @@
 - Results are specific to the audited prompt distribution and may not transfer.
 - Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed.
 
+## Protocol config
+
+- **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
+- full config: `auroc_baseline_margin=0.02`, `auroc_chance_margin=0.03`, `ci_level=0.95`, `dose_response_max_p=0.05`, `dose_response_min_rho=0.5`, `duplicate_judge_min_n=200`, `judge_binarize_threshold=0.5`, `judge_deadband=0.1`, `max_judge_spearman=0.995`, `min_eval_n=50`, `min_family_class_n=5`, `min_informative_judged=30`, `min_judge_kappa=0.4`, `min_judge_spearman=0.6`, `min_judges=2`, `min_resid_rel_delta=0.05`, `min_shared_efficacy_prompts=10`, `min_steered_prompts=20`, `n_boot=2000`, `n_perm=1000`, `noop_tolerance=0.001`, `require_output_change=True`, `require_symmetric_grid=True`, `required_controls=['random', 'orthogonal', 'wrong_layer']`, `seed=0`
+
 ## Reproducibility
 
-- Protocol: v0.1; config hash `be7d2a694c14992e`; bundle hash `650cdaef8f894050`
+- Protocol: v0.1; config hash `32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da`; bundle hash `4f99240a1bb140307de795cb465f1c3954ba33d70455d6b29c65ab705f6d4eab`
 - Re-run: `n/a`

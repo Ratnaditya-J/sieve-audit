@@ -1,18 +1,62 @@
 """Audit configuration: every threshold the verdict depends on, in one place.
 
-The full config is printed on the audit card and folded into the config hash
-(DESIGN.md section 6), and any deviation from the published defaults is
-flagged on the card — so a weakened protocol can never masquerade as the
-standard one.
+`AuditConfig()` with its defaults IS the frozen standard profile,
+``SIEVE-v0.1-strict``. The bar SIEVE sets is exactly this object; "passed
+SIEVE" is shorthand for "passed SIEVE-v0.1-strict", identified by its hash.
+
+Configurability exists for research, but it is walled off from the headline
+claim by an asymmetry (DESIGN.md section 7): you may only make the bar
+*stricter* and keep a positive verdict. Loosening any threshold — or changing
+a knob whose direction is ambiguous — voids the strong (`causally_sufficient`)
+and positive-decodability claims, downgrading them to `insufficient_protocol`.
+A weakened protocol therefore cannot masquerade as the standard one, and it
+cannot quietly buy a stronger verdict either; the card states the profile
+status as a binary an outsider can read.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 
 # The canonical control suite. A causal verdict additionally requires the
 # audit's required_controls to include ALL of these; configuring fewer
 # downgrades the audit to insufficient_protocol (anti-weakening guarantee).
 CANONICAL_CONTROLS: tuple[str, ...] = ("random", "orthogonal", "wrong_layer")
+
+# The name and version of the frozen standard profile (the defaults below).
+STRICT_PROFILE_NAME: str = "SIEVE-v0.1-strict"
+
+# For each gating field, the sign of "stricter": +1 means a LARGER value is
+# more conservative (so a smaller-than-default value loosens the bar), -1
+# means a SMALLER value is more conservative. A deviation is a *tightening*
+# only if it moves toward the stricter side; every other deviation (looser
+# side, or a field absent from these maps) is treated as a *loosening* and
+# voids positive verdicts. Conservatism by construction: to keep a positive
+# verdict you may only make the bar harder to clear.
+_STRICTER_NUMERIC: dict[str, int] = {
+    "n_boot": +1,
+    "ci_level": +1,
+    "auroc_chance_margin": +1,
+    "auroc_baseline_margin": +1,
+    "min_eval_n": +1,
+    "min_family_class_n": +1,
+    "noop_tolerance": -1,
+    "min_resid_rel_delta": +1,
+    "min_steered_prompts": +1,
+    "min_shared_efficacy_prompts": +1,
+    "dose_response_min_rho": +1,
+    "dose_response_max_p": -1,
+    "n_perm": +1,
+    "min_judges": +1,
+    "min_judge_kappa": +1,
+    "min_judge_spearman": +1,
+    "max_judge_spearman": -1,
+    "duplicate_judge_min_n": -1,
+    "min_informative_judged": +1,
+}
+_STRICTER_BOOL: dict[str, bool] = {
+    "require_output_change": True,
+    "require_symmetric_grid": True,
+}
 
 
 @dataclass(frozen=True)
@@ -65,7 +109,57 @@ class AuditConfig:
         return d
 
     def nondefault_fields(self) -> dict:
-        """Fields that deviate from the published protocol defaults."""
+        """Fields that deviate from the frozen strict profile (seed aside)."""
         default = AuditConfig(seed=self.seed).to_dict()
         mine = self.to_dict()
         return {k: v for k, v in mine.items() if default[k] != v and k != "seed"}
+
+    def _classify_deviation(self, name: str, value, default) -> str:
+        """'tightened' | 'loosened' for one deviating field."""
+        if name == "required_controls":
+            mine, base = set(self.required_controls), set(CANONICAL_CONTROLS)
+            # more controls than canonical is stricter; fewer is loosening
+            # (and is independently hard-refused by the engine)
+            return "tightened" if mine > base else "loosened"
+        if name in _STRICTER_BOOL:
+            return "tightened" if value == _STRICTER_BOOL[name] else "loosened"
+        if name in _STRICTER_NUMERIC:
+            direction = _STRICTER_NUMERIC[name]
+            if (value - default) * direction > 0:
+                return "tightened"
+            return "loosened"
+        # unknown-direction knob (e.g. binarize threshold, deadband): be
+        # conservative — treat any change as a loosening for verdict purposes
+        return "loosened"
+
+    def profile_status(self) -> dict:
+        """How this config relates to the frozen strict profile.
+
+        status:
+          - "strict"   — exactly SIEVE-v0.1-strict (the bar)
+          - "stricter" — deviates, but every deviation tightens the bar
+          - "loosened" — at least one deviation loosens (or is ambiguous);
+                         positive verdicts are voided
+        """
+        default = AuditConfig(seed=self.seed).to_dict()
+        mine = self.to_dict()
+        tightened: list[str] = []
+        loosened: list[str] = []
+        for f in fields(self):
+            name = f.name
+            if name == "seed" or mine[name] == default[name]:
+                continue
+            kind = self._classify_deviation(name, mine[name], default[name])
+            (tightened if kind == "tightened" else loosened).append(name)
+        if not tightened and not loosened:
+            status = "strict"
+        elif loosened:
+            status = "loosened"
+        else:
+            status = "stricter"
+        return {
+            "profile": STRICT_PROFILE_NAME,
+            "status": status,
+            "tightened": sorted(tightened),
+            "loosened": sorted(loosened),
+        }

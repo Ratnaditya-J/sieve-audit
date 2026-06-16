@@ -165,6 +165,7 @@ def run_audit(
             "smaller class"
         )
 
+    profile = cfg.profile_status()
     decision: Decision = decide(
         decod,
         efficacy.get(PROBE_ARM) if efficacy else None,
@@ -172,6 +173,7 @@ def run_audit(
         hard_gaps=hard_gaps,
         sufficiency_blockers=sufficiency_blockers,
         min_judges=cfg.min_judges,
+        loosened_fields=profile["loosened"],
     )
 
     card = build_card(bundle, cfg, decision, decod, efficacy, controls, bundle_path)
