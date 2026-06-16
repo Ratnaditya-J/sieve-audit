@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use SIEVE, please cite it as below."
+title: "SIEVE — Safety Indicator Evidence Validation Engine"
+abstract: >-
+  A reusable, third-party-runnable validity audit for activation-based AI
+  safety signals. SIEVE tests whether a probe / SAE feature / monitor score is
+  merely decodable or actually causally load-bearing — via a surface-baseline
+  must-beat, an efficacy gate, and matched-control steering (random /
+  orthogonal / wrong-layer) — and emits a scoped, caveat-bound, hash-identified
+  audit card under a frozen standard profile.
+type: software
+authors:
+  - family-names: Jonnalagadda
+    given-names: Ratnaditya
+    email: ratnaditya@gmail.com
+repository-code: "https://github.com/Ratnaditya-J/sieve-audit"
+url: "https://github.com/Ratnaditya-J/sieve-audit"
+license: MIT
+version: "0.1.0"
+keywords:
+  - AI safety
+  - interpretability
+  - activation probes
+  - deception detection
+  - evaluation
+  - activation steering
+references:
+  - type: article
+    title: >-
+      Probing Is Not Enough: Eval/Deploy Directions Are Decodable but Not
+      Causally Sufficient for Behavior
+    authors:
+      - family-names: Jonnalagadda
+        given-names: Ratnaditya
+    notes: "Companion paper; SIEVE generalizes its controlled causal-sufficiency protocol."
