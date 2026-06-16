@@ -47,16 +47,29 @@ _STRICTER_NUMERIC: dict[str, int] = {
     "dose_response_max_p": -1,
     "n_perm": +1,
     "min_judges": +1,
+    # larger deadband => fewer near-threshold records counted => harder to
+    # reach min_informative_judged => stricter
+    "judge_deadband": +1,
     "min_judge_kappa": +1,
     "min_judge_spearman": +1,
     "max_judge_spearman": -1,
     "duplicate_judge_min_n": -1,
+    # larger eps flags more judge pairs as near-duplicates => stricter
+    "judge_identical_eps": +1,
     "min_informative_judged": +1,
 }
 _STRICTER_BOOL: dict[str, bool] = {
     "require_output_change": True,
     "require_symmetric_grid": True,
 }
+# Fields that are genuinely non-monotone (no "stricter" direction) or are pure
+# RNG/precision and must NOT be treated as loosenable thresholds. Listed
+# explicitly so the coverage guard can confirm every field is accounted for.
+_PROFILE_EXEMPT: frozenset[str] = frozenset({
+    "seed",                      # RNG only
+    "judge_binarize_threshold",  # non-monotone: moving it either way relabels records
+    "required_controls",         # special-cased in _classify_deviation
+})
 
 
 @dataclass(frozen=True)
@@ -97,9 +110,13 @@ class AuditConfig:
     judge_deadband: float = 0.1
     min_judge_kappa: float = 0.4
     min_judge_spearman: float = 0.6     # continuous agreement over all records
-    # near-perfect agreement over many records means duplicated judges, not
-    # excellent ones; flagged as a protocol violation
+    # Duplicate-judge detection. Two genuinely independent judges may correlate
+    # highly on an easy metric, so high Spearman ALONE is not duplication — we
+    # also require their per-record scores to be near-identical (median
+    # absolute difference below judge_identical_eps). Both conditions, over at
+    # least duplicate_judge_min_n records, flag a protocol violation.
     max_judge_spearman: float = 0.995
+    judge_identical_eps: float = 0.02
     duplicate_judge_min_n: int = 200
     min_informative_judged: int = 30    # records outside the deadband needed for kappa
 
@@ -128,9 +145,23 @@ class AuditConfig:
             if (value - default) * direction > 0:
                 return "tightened"
             return "loosened"
-        # unknown-direction knob (e.g. binarize threshold, deadband): be
-        # conservative — treat any change as a loosening for verdict purposes
+        # genuinely non-monotone knob (e.g. judge_binarize_threshold): no
+        # "stricter" direction exists, so any change is conservatively a
+        # loosening for verdict purposes
         return "loosened"
+
+    @classmethod
+    def _check_field_coverage(cls) -> list[str]:
+        """Return any gating field not classified by the profile maps.
+
+        Coverage guard: a new threshold added to AuditConfig must land in
+        _STRICTER_NUMERIC, _STRICTER_BOOL, or _PROFILE_EXEMPT — otherwise it
+        would be silently mis-classified (always "loosened") and could let a
+        weakening slip through unflagged. tests/test_profile.py asserts this is
+        empty.
+        """
+        classified = set(_STRICTER_NUMERIC) | set(_STRICTER_BOOL) | set(_PROFILE_EXEMPT)
+        return sorted(f.name for f in fields(cls) if f.name not in classified)
 
     def profile_status(self) -> dict:
         """How this config relates to the frozen strict profile.

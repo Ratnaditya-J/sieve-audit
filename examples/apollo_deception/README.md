@@ -58,6 +58,10 @@ sieve audit --bundle /tmp/sieve-targets/bundle_rp_probe.json --name apollo_rp_pr
   activations" from "reads the scenario from the prompt" (the
   Smith/Chughtai/Nanda critique, arXiv 2511.22662, made operational).
 - Families = source datasets, so the leave-one-family-out baseline split
-  tests cross-dataset generalization — the probes' own headline claim.
+  tests cross-dataset generalization — the probes' own headline claim. The
+  family id comes from each sample's `metadata.dataset`, so the downloaded
+  `insider_trading_full.jsonl` yields the family **`insider_trading__upscale`**
+  (the id recorded in the published cards); `reports/apollo_audit_summary.md`
+  shortens it to `insider_trading` in prose. Same dataset, three surface names.
 - The probes' training sets (instructed-pairs, roleplaying) are disjoint from
-  all five evaluation dumps.
+  all four evaluation dumps used here.

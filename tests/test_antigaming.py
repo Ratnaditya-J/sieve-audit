@@ -75,14 +75,47 @@ def test_bimodal_control_effects_cannot_cancel():
 
 
 def test_degenerate_control_arm_is_refused():
-    """A 'control' that never moved the residual stream flatters any probe."""
+    """A 'control' whose injection never landed (dead hook) flatters any probe.
+
+    Zero out the *expected* injection too, so the arm looks like a zero-norm
+    direction — injection_verified must fail and the audit must refuse."""
     bundle = scenario_causally_sufficient()
     for r in bundle.efficacy:
         if r.arm == "random" and r.alpha != 0.0:
-            r.resid_delta_norm = 1e-6  # the random arm never actually steered
+            r.resid_delta_norm = 1e-6   # nothing moved
+            r.expected_delta_norm = 0.0  # ...because the direction was ~zero
             r.output_changed = False
     card = run_audit(bundle).card
     assert card.status == INSUFFICIENT_PROTOCOL
+
+
+def test_live_wrong_layer_control_with_small_relative_movement_is_not_refused():
+    """A real wrong-layer injection at a high-norm layer moves the residual
+    little in RELATIVE terms but is genuinely applied — it must NOT be treated
+    as degenerate (the bug a relative-threshold liveness check would cause)."""
+    bundle = scenario_causally_sufficient()
+    for r in bundle.efficacy:
+        if r.arm == "wrong_layer" and r.alpha != 0.0:
+            # injection is real (expected>0, delta tracks it) but the layer's
+            # base norm is huge, so delta/base is below min_resid_rel_delta
+            r.resid_base_norm = 100000.0
+            r.resid_delta_norm = r.expected_delta_norm  # tracks |alpha|*||w||
+    card = run_audit(bundle).card
+    assert card.verdict == Verdict.CAUSALLY_SUFFICIENT
+
+
+def test_genuinely_correlated_distinct_judges_are_not_flagged_duplicate():
+    """Two independent judges that agree well but differ per record (gap above
+    eps) must NOT trip the duplicate-judge violation."""
+    rng = np.random.default_rng(0)
+    bundle = scenario_causally_sufficient()
+    for r in bundle.steering:
+        a = r.judge_scores["judge_a"]
+        # judge_b tracks judge_a (high rank correlation) but offset per record
+        r.judge_scores["judge_b"] = float(np.clip(a + rng.uniform(-0.08, 0.08) + 0.05, 0, 1))
+    card = run_audit(bundle).card
+    assert card.verdict == Verdict.CAUSALLY_SUFFICIENT
+    assert not card.diagnostics["controls"]["judge"]["suspected_duplicates"]
 
 
 def test_control_arm_without_efficacy_records_is_refused():

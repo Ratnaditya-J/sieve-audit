@@ -142,6 +142,16 @@ def _load_model(args):
     return model, tokenizer
 
 
+def _input_device(model):
+    """Device for input ids / tensors. On a device_map='auto' sharded model,
+    `model.device` may be 'meta' or undefined; the input-embedding weight's
+    device is where token ids must land."""
+    try:
+        return model.get_input_embeddings().weight.device
+    except Exception:  # pragma: no cover - exotic models
+        return model.device
+
+
 def _encode(tokenizer, text: str, device):
     try:
         ids = tokenizer.apply_chat_template(
@@ -160,7 +170,7 @@ def _generate(model, tokenizer, text: str, hook: SteeringHook | None,
               layer: int, max_new_tokens: int) -> str:
     import torch
 
-    ids = _encode(tokenizer, text, model.device)
+    ids = _encode(tokenizer, text, _input_device(model))
     if hook is not None:
         hook.register(model, layer)
     try:
@@ -190,7 +200,7 @@ def _hidden_at_layer(model, tokenizer, text: str, layer: int):
     handle = _get_layer_module(model, layer).register_forward_hook(grab)
     try:
         with torch.no_grad():
-            model(_encode(tokenizer, text, model.device))
+            model(_encode(tokenizer, text, _input_device(model)))
     finally:
         handle.remove()
     return captured["h"].numpy()
@@ -234,11 +244,13 @@ def cmd_vectors(args) -> int:
     X = np.stack(acts)
     y = np.array(labels)
 
-    # mean-diff, z-scored per dimension, unit norm (paper convention)
+    # mean-diff of z-scored activations, unit norm (companion-paper CAA
+    # convention). (X-mu)/sd then the class mean-difference already yields the
+    # z-scored mean-diff = meandiff/sd; dividing by sd again would give
+    # meandiff/sd^2 (low-variance dims blown up) — a bug. Just normalise.
     mu, sd = X.mean(0), X.std(0) + 1e-8
     Xz = (X - mu) / sd
     w = Xz[y == 1].mean(0) - Xz[y == 0].mean(0)
-    w = w / sd  # back to raw activation space
     w = w / np.linalg.norm(w)
 
     rng = np.random.default_rng(args.seed)
@@ -328,7 +340,7 @@ def cmd_steer(args) -> int:
     done = 0
     with out.open("w") as fout:
         for arm in ARMS:
-            w = torch.from_numpy(directions[arm]).to(model.device)
+            w = torch.from_numpy(directions[arm]).to(_input_device(model))
             layer = arm_layers[arm]
             for alpha in alphas:
                 for p in prompts:
@@ -558,7 +570,16 @@ def cmd_bundle(args) -> int:
         )
         for r in judged_rows
     ]
+    n_before = len(steering)
     steering = [r for r in steering if len(r.judge_scores) >= 2]
+    dropped = n_before - len(steering)
+    if dropped:
+        frac = dropped / max(n_before, 1)
+        print(
+            f"[bundle] WARNING: dropped {dropped}/{n_before} steering records "
+            f"({frac:.0%}) with < 2 finite judge scores — a flaky/unparseable "
+            "judge silently shrinks the evidence; check judge output before trusting the audit"
+        )
 
     bundle = EvidenceBundle(
         model=args.model,

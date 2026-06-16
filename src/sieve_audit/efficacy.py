@@ -34,6 +34,13 @@ class EfficacyResult:
     median_rel_delta_at_max: float  # median ||delta|| / ||h_base|| at max |alpha|
     any_output_changed_at_max: bool
     effective: bool
+    # A real, non-degenerate perturbation was applied at the correct magnitude
+    # (|alpha|*||w|| > 0 and the residual moved to match). This is the liveness
+    # bar for CONTROL arms: it catches a zero-norm or dead-hook "control"
+    # without demanding the probe-arm behavioral thresholds (output change,
+    # relative-movement floor), which legitimately vary by layer — e.g. a
+    # wrong-layer arm injected where the residual norm is much larger.
+    injection_verified: bool = False
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -44,6 +51,7 @@ class EfficacyResult:
             "median_rel_delta_at_max": self.median_rel_delta_at_max,
             "any_output_changed_at_max": self.any_output_changed_at_max,
             "effective": self.effective,
+            "injection_verified": self.injection_verified,
             "notes": self.notes,
         }
 
@@ -113,6 +121,15 @@ def run_efficacy(
 
     effective = hook_correct and moved and (any_changed or not cfg.require_output_change)
 
+    # Liveness for control arms: a real, correctly-applied, nonzero injection.
+    # max expected delta > 0 rules out a zero-norm "control"; hook_correct
+    # confirms the residual actually moved to match |alpha|*||w|| (so a dead
+    # hook that swallows the injection also fails). Crucially this does NOT
+    # require the relative-movement floor against THIS arm's base norm, which
+    # would spuriously fail a wrong-layer arm at a high-norm layer.
+    max_expected = max((r.expected_delta_norm for r in records), default=0.0)
+    injection_verified = hook_correct and max_expected > 0.0
+
     return EfficacyResult(
         hook_correct=hook_correct,
         noop_ok=noop_ok,
@@ -120,6 +137,7 @@ def run_efficacy(
         median_rel_delta_at_max=median_rel,
         any_output_changed_at_max=any_changed,
         effective=effective,
+        injection_verified=injection_verified,
         notes=notes,
     )
 

@@ -167,26 +167,36 @@ def _judge_agreement(
             notes=[f"only {len(judges)} judge(s); protocol requires >= {cfg.min_judges}"],
         )
 
-    # continuous agreement over every judged generation (all arms)
+    # continuous agreement over every judged generation (all arms), plus the
+    # per-record absolute gap (to tell genuine high correlation from literal
+    # duplication)
     spearmans = []
+    min_abs_gap = float("inf")
     for a, b in combinations(judges, 2):
         sa = np.array([r.judge_scores[a] for r in records])
         sb = np.array([r.judge_scores[b] for r in records])
         rho = spearmanr(sa, sb).statistic
         spearmans.append(0.0 if np.isnan(rho) else float(rho))
+        min_abs_gap = min(min_abs_gap, float(np.median(np.abs(sa - sb))))
     min_spearman = float(min(spearmans))
     max_spearman = float(max(spearmans))
 
-    # near-perfect agreement over many records is duplication, not excellence
+    # Duplication, not excellence: a pair that is BOTH near-perfectly ranked
+    # AND near-identical per record. Two genuinely independent judges can
+    # correlate highly on an easy metric (high spearman) while still differing
+    # per record (gap above eps), so both conditions are required — this keeps
+    # a real two-judge run from being voided for agreeing well.
     suspected_duplicates = (
         len(records) >= cfg.duplicate_judge_min_n
         and max_spearman > cfg.max_judge_spearman
+        and min_abs_gap < cfg.judge_identical_eps
     )
     if suspected_duplicates:
         notes.append(
-            f"pairwise judge spearman {max_spearman:.4f} over {len(records)} "
-            f"records (> {cfg.max_judge_spearman}): judges are near-duplicates; "
-            "independent judges disagree sometimes"
+            f"a judge pair is near-identical (median |Δ|={min_abs_gap:.4f} < "
+            f"{cfg.judge_identical_eps}, spearman {max_spearman:.4f} > "
+            f"{cfg.max_judge_spearman}) over {len(records)} records: suspected "
+            "duplicate judges; independent judges differ per record"
         )
 
     # binarized agreement only where EVERY judge committed (outside deadband);

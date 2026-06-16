@@ -34,7 +34,7 @@ Anything outside that sentence is out of scope for v0.1 (see §8).
 **Own (the differentiated spine):**
 - the **efficacy gate** (intervention-correctness + "did anything move?"),
 - **matched-control steering** (probe / random / orthogonal / wrong-layer),
-- **surface-baseline** checks (length, TF-IDF, template),
+- **surface-baseline** checks (length, TF-IDF),
 - **two-judge** behavioral scoring + inter-rater agreement,
 - the **verdict logic**, and
 - the **audit-card generator**.

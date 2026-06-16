@@ -112,10 +112,13 @@ def _cross_stage_gaps(
                 f"control arm {control!r} has no efficacy records: a degenerate "
                 "control would make any probe look superior"
             )
-        elif not ctrl_eff.effective:
+        elif not ctrl_eff.injection_verified:
+            # liveness, not behavioral strength: catches a zero-norm/dead-hook
+            # control, but does not penalise a wrong-layer arm whose injection
+            # is real yet small relative to that layer's residual norm
             gaps.append(
-                f"control arm {control!r} did not demonstrably move the residual "
-                "stream/outputs: degenerate control"
+                f"control arm {control!r} applied no real perturbation "
+                "(zero-norm direction or dead hook): degenerate control"
             )
     return gaps
 

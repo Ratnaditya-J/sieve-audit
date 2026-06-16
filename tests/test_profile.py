@@ -52,6 +52,31 @@ def test_default_config_is_the_strict_profile():
     assert not status["loosened"] and not status["tightened"]
 
 
+def test_every_config_field_is_profile_classified():
+    """Coverage guard: no gating threshold may be silently unclassified.
+
+    A field missing from the _STRICTER maps and the exempt set would always be
+    read as 'loosened', mis-stamping legitimate audits — or, worse, a future
+    field could be added with the wrong handling. This must stay empty.
+    """
+    assert AuditConfig._check_field_coverage() == []
+
+
+def test_judge_deadband_loosening_voids():
+    # smaller deadband is looser (admits near-threshold noise into kappa)
+    card = run_audit(
+        scenario_causally_sufficient(), AuditConfig(judge_deadband=0.0)
+    ).card
+    assert card.verdict != Verdict.CAUSALLY_SUFFICIENT
+    assert "judge_deadband" in card.diagnostics["profile"]["loosened"]
+
+
+def test_nonmonotone_binarize_threshold_is_conservatively_loosened():
+    status = AuditConfig(judge_binarize_threshold=0.6).profile_status()
+    assert status["status"] == "loosened"
+    assert "judge_binarize_threshold" in status["loosened"]
+
+
 @pytest.mark.parametrize("field,value", LOOSENINGS)
 def test_each_loosening_voids_causally_sufficient(field, value):
     bundle = scenario_causally_sufficient()

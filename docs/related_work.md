@@ -176,7 +176,7 @@ recognized by the field (Smith/Chughtai/Nanda; labs conceding their own
 high-AUROC probes are not robust defenses). SIEVE occupies that gap. Its
 contribution is **infrastructure-and-synthesis on an openly-unsolved problem**,
 not a new method — and the standard-setting move (a frozen `SIEVE-v0.1-strict`
-profile, DESIGN.md §7.5) is what distinguishes it from a parameterized script.
+profile, DESIGN.md §7, guarantee 5) is what distinguishes it from a parameterized script.
 
 ## Residual uncertainty (what could not be closed)
 

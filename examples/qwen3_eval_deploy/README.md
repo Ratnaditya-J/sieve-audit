@@ -1,12 +1,20 @@
 # Flagship demo: Qwen3-32B eval/deploy direction (L55), full protocol
 
 Reproduces the canonical SIEVE audit on the eval/deploy contrastive direction
-at Qwen3-32B layer 55 — the headline result of the companion paper
-*"Probing Is Not Enough"*: linearly decodable (AUROC ~0.917), but **not
-causally sufficient** under matched random / orthogonal / wrong-layer
-controls.
+at Qwen3-32B layer 55. The companion paper *"Probing Is Not Enough"* reports
+this direction as linearly decodable (AUROC ~0.917) but **not causally
+sufficient** under matched random / orthogonal / wrong-layer controls — this
+demo's purpose is to **reproduce that result through SIEVE's protocol**.
 
-Companion runs (same runbook, different model/layers):
+> **Status: not yet run.** The numbers above are the companion paper's
+> *expected* result, not a SIEVE output — there is no Qwen3 card in
+> [`../../reports/`](../../reports/) yet. This page is the runbook; producing
+> the card needs the GPU run below. SIEVE has so far been validated end-to-end
+> on synthetic ground truth (`sieve selftest`) and run for real only on the
+> decodability stage (the [Apollo audit](../apollo_deception/)).
+
+Companion runs (same runbook, different model/layers), also expected results
+from the paper, not yet reproduced:
 - gpt-oss-120b **L15** -> expected: effective, probe-direction null (corroborating).
 - gpt-oss-120b **L34** -> expected: intervention ineffective -> inconclusive
   (demonstrates the efficacy gate; residual std ~961 swallows the injection).

@@ -48,6 +48,7 @@
    "min_judge_kappa": 0.4,
    "min_judge_spearman": 0.6,
    "max_judge_spearman": 0.995,
+   "judge_identical_eps": 0.02,
    "duplicate_judge_min_n": 200,
    "min_informative_judged": 30
   },
@@ -118,7 +119,7 @@
   "Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed."
  ],
  "protocol_version": "0.1",
- "config_hash": "32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da",
+ "config_hash": "7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd",
  "bundle_hash": "280810fdc7dc6b82f3437f8c2b582ab0800764a6305ff1de286ab96d5d213288",
  "rerun_command": "sieve audit --bundle /tmp/sieve-targets/bundle_pairs_probe.json --seed 0"
 }
