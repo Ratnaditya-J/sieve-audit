@@ -59,6 +59,13 @@ This repository ships **only openly-licensed prompts**. Raw activations, judged
 run outputs, and non-redistributable benchmark prompts are never committed
 (see `.gitignore`).
 
+## Landscape
+
+Where SIEVE sits relative to interpretability platforms, evals/red-teaming
+companies, and the probe-validity literature — and why the reusable
+validity-harness niche is empty — is documented with sources in
+[`docs/related_work.md`](docs/related_work.md).
+
 ## Provenance
 
 SIEVE generalizes the controlled causal-sufficiency protocol from the companion
