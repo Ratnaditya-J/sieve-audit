@@ -1,6 +1,6 @@
 # SIEVE audit card — `surface_confounded`
 
-> **Verdict: surface_confounded** (protocol v0.1, config `32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da`, bundle `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`)
+> **Verdict: surface_confounded** (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`)
 >
 > **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 
@@ -58,9 +58,9 @@
 ## Protocol config
 
 - **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
-- full config: `auroc_baseline_margin=0.02`, `auroc_chance_margin=0.03`, `ci_level=0.95`, `dose_response_max_p=0.05`, `dose_response_min_rho=0.5`, `duplicate_judge_min_n=200`, `judge_binarize_threshold=0.5`, `judge_deadband=0.1`, `max_judge_spearman=0.995`, `min_eval_n=50`, `min_family_class_n=5`, `min_informative_judged=30`, `min_judge_kappa=0.4`, `min_judge_spearman=0.6`, `min_judges=2`, `min_resid_rel_delta=0.05`, `min_shared_efficacy_prompts=10`, `min_steered_prompts=20`, `n_boot=2000`, `n_perm=1000`, `noop_tolerance=0.001`, `require_output_change=True`, `require_symmetric_grid=True`, `required_controls=['random', 'orthogonal', 'wrong_layer']`, `seed=0`
+- full config: `auroc_baseline_margin=0.02`, `auroc_chance_margin=0.03`, `ci_level=0.95`, `dose_response_max_p=0.05`, `dose_response_min_rho=0.5`, `duplicate_judge_min_n=200`, `judge_binarize_threshold=0.5`, `judge_deadband=0.1`, `judge_identical_eps=0.02`, `max_judge_spearman=0.995`, `min_eval_n=50`, `min_family_class_n=5`, `min_informative_judged=30`, `min_judge_kappa=0.4`, `min_judge_spearman=0.6`, `min_judges=2`, `min_resid_rel_delta=0.05`, `min_shared_efficacy_prompts=10`, `min_steered_prompts=20`, `n_boot=2000`, `n_perm=1000`, `noop_tolerance=0.001`, `require_output_change=True`, `require_symmetric_grid=True`, `required_controls=['random', 'orthogonal', 'wrong_layer']`, `seed=0`
 
 ## Reproducibility
 
-- Protocol: v0.1; config hash `32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da`; bundle hash `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`
+- Protocol: v0.1; config hash `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`; bundle hash `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`
 - Re-run: `n/a`

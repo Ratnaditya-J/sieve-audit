@@ -59,6 +59,7 @@
    "min_judge_kappa": 0.4,
    "min_judge_spearman": 0.6,
    "max_judge_spearman": 0.995,
+   "judge_identical_eps": 0.02,
    "duplicate_judge_min_n": 200,
    "min_informative_judged": 30
   },
@@ -117,6 +118,7 @@
     "median_rel_delta_at_max": 0.20097944154957084,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    },
    "probe": {
@@ -126,6 +128,7 @@
     "median_rel_delta_at_max": 0.19923872453161479,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    },
    "random": {
@@ -135,6 +138,7 @@
     "median_rel_delta_at_max": 0.19708446978755545,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    },
    "wrong_layer": {
@@ -144,6 +148,7 @@
     "median_rel_delta_at_max": 0.19991955786485488,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    }
   },
@@ -289,7 +294,8 @@
   "control 'wrong_layer' missing at alpha=20"
  ],
  "protocol_version": "0.1",
- "config_hash": "32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da",
+ "config_hash": "7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd",
  "bundle_hash": "637cc31eea32436aa9798211aa43ef22e2477b6be94f69cba9f97c0a7ee62679",
- "rerun_command": null
+ "rerun_command": null,
+ "preregistration": null
 }

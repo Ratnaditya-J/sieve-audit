@@ -62,6 +62,7 @@
    "min_judge_kappa": 0.4,
    "min_judge_spearman": 0.6,
    "max_judge_spearman": 0.995,
+   "judge_identical_eps": 0.02,
    "duplicate_judge_min_n": 200,
    "min_informative_judged": 30
   },
@@ -120,6 +121,7 @@
     "median_rel_delta_at_max": 0.1975482398131893,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    },
    "probe": {
@@ -129,6 +131,7 @@
     "median_rel_delta_at_max": 0.1984040598476276,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    },
    "random": {
@@ -138,6 +141,7 @@
     "median_rel_delta_at_max": 0.20032891861993118,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    },
    "wrong_layer": {
@@ -147,6 +151,7 @@
     "median_rel_delta_at_max": 0.19840752465292977,
     "any_output_changed_at_max": true,
     "effective": true,
+    "injection_verified": true,
     "notes": []
    }
   },
@@ -359,7 +364,8 @@
   "Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed."
  ],
  "protocol_version": "0.1",
- "config_hash": "32fd6221f5e517d35d8ae7914c8985e62b8579d3e2b2e92e6ca8c2e0bc40d9da",
+ "config_hash": "7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd",
  "bundle_hash": "a0aa98bc2f79d7c0180d6337902061f73ea4ff7023c45dbcdcea499db1da7cb1",
- "rerun_command": null
+ "rerun_command": null,
+ "preregistration": null
 }
