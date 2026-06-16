@@ -59,6 +59,12 @@ This repository ships **only openly-licensed prompts**. Raw activations, judged
 run outputs, and non-redistributable benchmark prompts are never committed
 (see `.gitignore`).
 
+## Writeup
+
+The field-facing summary — the standard, the Apollo audit results, and the
+whitespace — is in
+[`docs/standard-validity-audit.md`](docs/standard-validity-audit.md).
+
 ## Landscape
 
 Where SIEVE sits relative to interpretability platforms, evals/red-teaming
