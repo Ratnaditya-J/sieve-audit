@@ -74,6 +74,9 @@ class AuditCard:
     config_hash: str | None = None
     bundle_hash: str | None = None
     rerun_command: str | None = None
+    # {"declared_hash","recomputed_hash","matches","diffs"} when a
+    # pre-registration was supplied; None otherwise.
+    preregistration: dict | None = None
 
 
 @dataclass(frozen=True)

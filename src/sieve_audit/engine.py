@@ -127,6 +127,7 @@ def run_audit(
     bundle: EvidenceBundle,
     cfg: AuditConfig | None = None,
     bundle_path: str | None = None,
+    prereg=None,
 ) -> AuditResult:
     """Run every stage the evidence supports, then decide and emit the card.
 
@@ -179,5 +180,13 @@ def run_audit(
         loosened_fields=profile["loosened"],
     )
 
-    card = build_card(bundle, cfg, decision, decod, efficacy, controls, bundle_path)
+    prereg_check = None
+    if prereg is not None:
+        from .prereg import verify_prereg
+
+        prereg_check = verify_prereg(prereg, bundle, cfg)
+
+    card = build_card(
+        bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check
+    )
     return AuditResult(card=card, decodability=decod, efficacy=efficacy, controls=controls)

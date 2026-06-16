@@ -52,6 +52,7 @@ def build_card(
     efficacy: dict[str, EfficacyResult] | None,
     controls: ControlsResult | None,
     bundle_path: str | None = None,
+    prereg_check=None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
@@ -66,6 +67,18 @@ def build_card(
         "config_nondefault": cfg.nondefault_fields(),
         "profile": profile,
     }
+    if prereg_check is not None:
+        diagnostics["preregistration"] = prereg_check.to_dict()
+        if not prereg_check.matches:
+            risks_prereg = (
+                "PRE-REGISTRATION MISMATCH: the run deviated from the committed "
+                f"plan ({prereg_check.declared_hash[:16]}); the pre-registration "
+                "claim does not hold. Diffs: " + "; ".join(prereg_check.diffs)
+            )
+        else:
+            risks_prereg = None
+    else:
+        risks_prereg = None
     if decod is not None:
         diagnostics["decodability"] = decod.to_dict()
     if efficacy is not None:
@@ -102,6 +115,8 @@ def build_card(
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
     risks = list(RESIDUAL_RISKS_COMMON)
+    if risks_prereg:
+        risks.insert(0, risks_prereg)
     if profile["status"] == "loosened":
         risks.insert(
             0,
@@ -141,6 +156,7 @@ def build_card(
         rerun_command=(
             f"sieve audit --bundle {bundle_path} --seed {cfg.seed}" if bundle_path else None
         ),
+        preregistration=prereg_check.to_dict() if prereg_check is not None else None,
     )
 
 
@@ -188,6 +204,20 @@ def card_to_markdown(card: AuditCard) -> str:
         f"config `{card.config_hash}`, bundle `{card.bundle_hash}`)",
         ">",
         f"> {_profile_line(card)}",
+    ]
+    if card.preregistration is not None:
+        pre = card.preregistration
+        if pre["matches"]:
+            lines.append(
+                f"> **Pre-registered:** ✅ matches `{pre['declared_hash'][:16]}` "
+                "(config + scope committed before results)"
+            )
+        else:
+            lines.append(
+                f"> **Pre-registered:** ⚠️ MISMATCH vs `{pre['declared_hash'][:16]}` "
+                "— the run deviated from the committed plan (see residual risks)"
+            )
+    lines += [
         "",
         "## Scope (what was actually tested)",
         "",

@@ -72,8 +72,8 @@ The risk: an anti-overclaiming tool can be turned into a laundering tool. Defens
 
 ## 8. MVP (v0.1) vs. roadmap
 
-- **v0.1 ships:** verdict taxonomy, efficacy gate, control-suite steering, surface baselines, two-judge scoring, audit card, CLI + an Inspect-compatible scorer/report. Models: Qwen3-32B (dense), gpt-oss-120b (MoE).
-- **Roadmap:** necessity/ablation (the other half of causality), multi-layer/distributed interventions, more models (Llama / Kimi / GLM), pre-registration mode, non-activation signal types (trace, behavioral, monitor scores).
+- **v0.1 ships:** verdict taxonomy, efficacy gate, control-suite steering, surface baselines, two-judge scoring, audit card, frozen strict profile, pre-registration mode, CLI + an Inspect task/scorer. Reference targets: Qwen3-32B (dense), gpt-oss-120b (MoE).
+- **Roadmap:** necessity/ablation (the other half of causality), multi-layer/distributed interventions, more models (Llama / Kimi / GLM), non-activation signal types (trace, behavioral, monitor scores).
 
 ## 9. Flagship demo (three cards, not two)
 
