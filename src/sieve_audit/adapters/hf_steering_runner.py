@@ -453,7 +453,7 @@ def _make_judge(spec: str, metric: str):
     if provider == "anthropic":
         import anthropic
 
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(timeout=90.0, max_retries=3)
 
         def judge(prompt: str, response: str) -> float:
             msg = client.messages.create(
@@ -478,9 +478,11 @@ def _make_judge(spec: str, metric: str):
             client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=os.environ.get("OPENROUTER_API_KEY"),
+                timeout=90.0,
+                max_retries=3,
             )
         else:
-            client = OpenAI()
+            client = OpenAI(timeout=90.0, max_retries=3)
 
         def judge(prompt: str, response: str) -> float:
             out = client.chat.completions.create(
@@ -508,6 +510,8 @@ def _parse_score(text: str) -> float:
 def cmd_judge(args) -> int:
     if len(args.judges) < 2:
         raise SystemExit("the protocol requires >= 2 judges (use two --judge specs)")
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     prompts = {p.get("prompt_id", p.get("id", "p?")): p["text"]
                for p in _load_labeled_prompts(args.steer_prompts)}
     judges = {spec: _make_judge(spec, args.metric) for spec in args.judges}
@@ -517,25 +521,39 @@ def cmd_judge(args) -> int:
         for line in f:
             if line.strip():
                 rows.append(json.loads(line))
-    print(f"[judge] scoring {len(rows)} generations with {len(judges)} judges")
+    print(f"[judge] scoring {len(rows)} generations with {len(judges)} judges, "
+          f"{args.workers} workers")
+
+    def score_row(r: dict) -> dict:
+        # Each judge call has its own timeout+retries (see _make_judge); a
+        # persistent failure yields NaN for that judge, dropped at bundle time.
+        scores = {}
+        for spec, fn in judges.items():
+            try:
+                scores[spec] = fn(prompts.get(r["prompt_id"], ""), r["generated_text"])
+            except Exception as exc:  # noqa: BLE001
+                print(f"  judge {spec} failed on {r['arm']}@{r['alpha']}/{r['prompt_id']}: {exc}")
+                scores[spec] = float("nan")
+        return {"arm": r["arm"], "alpha": r["alpha"], "prompt_id": r["prompt_id"],
+                "judge_scores": scores}
+
+    # Judging is API-bound and order-independent, so fan out across threads
+    # (the GPU is idle here). Results are reordered to input order before write.
+    results: list[dict | None] = [None] * len(rows)
+    done = 0
+    with ThreadPoolExecutor(max_workers=args.workers) as ex:
+        fut_to_i = {ex.submit(score_row, r): i for i, r in enumerate(rows)}
+        for fut in as_completed(fut_to_i):
+            results[fut_to_i[fut]] = fut.result()
+            done += 1
+            if done % 50 == 0:
+                print(f"  {done}/{len(rows)}")
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w") as fout:
-        for i, r in enumerate(rows):
-            scores = {}
-            for spec, fn in judges.items():
-                try:
-                    scores[spec] = fn(prompts.get(r["prompt_id"], ""), r["generated_text"])
-                except Exception as exc:
-                    print(f"  judge {spec} failed on row {i}: {exc}")
-                    scores[spec] = float("nan")
-            fout.write(json.dumps({
-                "arm": r["arm"], "alpha": r["alpha"], "prompt_id": r["prompt_id"],
-                "judge_scores": scores,
-            }) + "\n")
-            if (i + 1) % 50 == 0:
-                print(f"  {i + 1}/{len(rows)}")
+        for rec in results:
+            fout.write(json.dumps(rec) + "\n")
     print(f"[judge] -> {out}")
     return 0
 
@@ -677,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="repeatable: anthropic:<model> | openai:<model> | "
                         "openrouter:<route> | stub:<name>")
     p.add_argument("--metric", default="deception")
+    p.add_argument("--workers", type=int, default=8,
+                   help="concurrent judge API calls (judging is GPU-idle)")
     p.add_argument("--out", required=True)
     p.set_defaults(func=cmd_judge)
 
