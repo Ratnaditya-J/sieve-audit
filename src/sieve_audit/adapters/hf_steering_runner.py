@@ -257,6 +257,29 @@ def _load_labeled_prompts(path: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+def _probe_direction(X, y):
+    """Mean-diff of z-scored activations, unit norm (companion-paper CAA
+    convention). (X-mu)/sd then the class mean-difference already yields the
+    z-scored mean-diff = meandiff/sd; dividing by sd again would give
+    meandiff/sd^2 (low-variance dims blown up) — a bug. Just normalise.
+    Returns (w, mu, sd)."""
+    mu, sd = X.mean(0), X.std(0) + 1e-8
+    Xz = (X - mu) / sd
+    w = Xz[y == 1].mean(0) - Xz[y == 0].mean(0)
+    return w / np.linalg.norm(w), mu, sd
+
+
+def _control_directions(w, seed):
+    """random + orthogonal control directions for a given probe direction."""
+    rng = np.random.default_rng(seed)
+    r = rng.normal(size=w.shape)
+    random_dir = r / np.linalg.norm(r)
+    r2 = rng.normal(size=w.shape)
+    orth = r2 - (r2 @ w) * w
+    orth = orth / np.linalg.norm(orth)
+    return random_dir, orth
+
+
 def cmd_vectors(args) -> int:
     model, tokenizer = _load_model(args)
     prompts = _load_labeled_prompts(args.contrast_prompts)
@@ -273,21 +296,8 @@ def cmd_vectors(args) -> int:
     X = np.stack(acts)
     y = np.array(labels)
 
-    # mean-diff of z-scored activations, unit norm (companion-paper CAA
-    # convention). (X-mu)/sd then the class mean-difference already yields the
-    # z-scored mean-diff = meandiff/sd; dividing by sd again would give
-    # meandiff/sd^2 (low-variance dims blown up) — a bug. Just normalise.
-    mu, sd = X.mean(0), X.std(0) + 1e-8
-    Xz = (X - mu) / sd
-    w = Xz[y == 1].mean(0) - Xz[y == 0].mean(0)
-    w = w / np.linalg.norm(w)
-
-    rng = np.random.default_rng(args.seed)
-    r = rng.normal(size=w.shape)
-    random_dir = r / np.linalg.norm(r)
-    r2 = rng.normal(size=w.shape)
-    orth = r2 - (r2 @ w) * w
-    orth = orth / np.linalg.norm(orth)
+    w, mu, sd = _probe_direction(X, y)
+    random_dir, orth = _control_directions(w, args.seed)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -327,6 +337,75 @@ def cmd_decode(args) -> int:
             print(f"  {i + 1}/{len(prompts)}")
     Path(args.out).write_text(json.dumps(records, indent=1))
     print(f"[decode] -> {args.out}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# subcommand: decode-lofo (leave-one-family-out direction + projection)
+# ---------------------------------------------------------------------------
+
+
+def cmd_decode_lofo(args) -> int:
+    """Fair decodability: for each family, train the probe direction on the
+    OTHER families and project the held-out family. The probe then faces the
+    exact same train-on-3-families / test-on-the-4th burden the surface
+    baselines face inside the engine — no train/test leakage, every probe
+    score is genuinely out-of-family (so --attest-out-of-sample is truthful).
+    Also saves the full-data direction (+ controls) to --save-vectors for the
+    steering stage, which needs a single canonical direction to inject."""
+    model, tokenizer = _load_model(args)
+    prompts = _load_labeled_prompts(args.holdout_prompts)
+    if any("label" not in p or "family" not in p for p in prompts):
+        raise SystemExit("holdout prompts need 'label' and 'family' fields")
+
+    print(f"[decode-lofo] extracting layer-{args.layer} activations for "
+          f"{len(prompts)} holdout prompts (pool={args.pool})")
+    acts = []
+    for i, p in enumerate(prompts):
+        acts.append(_hidden_at_layer(model, tokenizer, p["text"], args.layer,
+                                     pool=args.pool))
+        if (i + 1) % 25 == 0:
+            print(f"  {i + 1}/{len(prompts)}")
+    X = np.stack(acts)
+    y = np.array([int(p["label"]) for p in prompts])
+    fams = np.array([str(p["family"]) for p in prompts])
+    uniq = sorted(set(fams.tolist()))
+    if len(uniq) < 2:
+        raise SystemExit("decode-lofo needs >= 2 families; use plain `decode` "
+                         "with a separate --vectors direction instead")
+
+    # per-family out-of-fold projection
+    scores = np.full(len(y), np.nan)
+    for f in uniq:
+        te = fams == f
+        tr = ~te
+        if len(set(y[tr].tolist())) < 2:
+            raise SystemExit(f"family {f!r} left training with one class only; "
+                             "every other family must contain both labels")
+        w_f, mu, sd = _probe_direction(X[tr], y[tr])
+        scores[te] = X[te] @ w_f
+    assert not np.isnan(scores).any()
+
+    records = [{
+        "prompt_id": p.get("prompt_id", f"h{i}"),
+        "text": p["text"],
+        "label": int(p["label"]),
+        "family": str(p["family"]),
+        "probe_score": float(scores[i]),
+    } for i, p in enumerate(prompts)]
+    Path(args.out).write_text(json.dumps(records, indent=1))
+    print(f"[decode-lofo] {len(uniq)} folds ({','.join(uniq)}) -> {args.out}  "
+          "(every score is out-of-family)")
+
+    # full-data canonical direction for the steering stage
+    w, mu, sd = _probe_direction(X, y)
+    random_dir, orth = _control_directions(w, args.seed)
+    sv = Path(args.save_vectors)
+    sv.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(sv, probe=w.astype(np.float32), random=random_dir.astype(np.float32),
+             orthogonal=orth.astype(np.float32),
+             zscore_mu=mu.astype(np.float32), zscore_sd=sd.astype(np.float32))
+    print(f"[decode-lofo] full-data direction (+controls) -> {sv}")
     return 0
 
 
@@ -766,6 +845,21 @@ def main(argv: list[str] | None = None) -> int:
                    help="activation pooling; MUST match the vectors --pool")
     p.add_argument("--out", required=True)
     p.set_defaults(func=cmd_decode)
+
+    p = sub.add_parser("decode-lofo",
+                       help="leave-one-family-out direction + projection "
+                            "(fair probe-vs-baseline; no separate vectors step)")
+    add_model_args(p)
+    p.add_argument("--holdout-prompts", type=Path, required=True,
+                   help="JSONL: {prompt_id, text, label, family}; serves as "
+                        "BOTH the direction-training and the decode set, split "
+                        "leave-one-family-out")
+    p.add_argument("--pool", choices=["last", "mean"], default="last")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--save-vectors", required=True,
+                   help=".npz: full-data direction (+controls) for `steer`")
+    p.add_argument("--out", required=True, help="decode.json (out-of-family scores)")
+    p.set_defaults(func=cmd_decode_lofo)
 
     p = sub.add_parser("steer", help="steered generations + efficacy records")
     add_model_args(p)

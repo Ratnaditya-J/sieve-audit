@@ -5,11 +5,18 @@
 # Qwen3-32B, eval/deploy direction at layer 55, matched controls at the
 # wrong layer 25, two independent judges via OpenRouter.
 #
+# Decodability uses the v3 controlled holdout (lexically surface-robust: tfidf
+# leave-one-family-out AUROC ~0.48 vs v2's 0.984) with a LEAVE-ONE-FAMILY-OUT
+# direction (decode-lofo): for each framing family the probe direction is
+# trained on the other three families and projected onto the held-out one, so
+# the probe and the surface baselines face the identical generalisation burden.
+#
 # Prereqs on the pod (set by the human, never by the script):
 #   export HF_TOKEN=...              # model download (gated models)
 #   export OPENROUTER_API_KEY=...    # both judges, one key
-# Prompts in ./prompts/ (pushed separately):
-#   contrast_triggers.jsonl  controlled_holdout_v2.jsonl  steer_prompts.jsonl
+# Prompts in ./prompts/ (built by prepare_prompts.py from controlled_holdout_v3):
+#   controlled_holdout_v3.jsonl  steer_prompts.jsonl
+#   (no separate contrast file — the holdout trains the direction LOFO)
 #
 # Usage:  bash pod_run.sh            # full flagship
 #         SMOKE=1 bash pod_run.sh    # tiny CPU model, 3 prompts (plumbing check)
@@ -60,19 +67,20 @@ print("[pod] CUDA:", torch.cuda.get_device_name(0),
 PY
 fi
 
-# ---- 1. directions ----
-$RUN vectors --model "$MODEL" --layer "$LAYER" --dtype "$DTYPE" \
-  --contrast-prompts "$PROMPTS/contrast_triggers.jsonl" --out "$OUT/vectors.npz"
+HOLDOUT="${HOLDOUT:-$PROMPTS/controlled_holdout_v3.jsonl}"
+
+# ---- 1. decodability + canonical direction (leave-one-family-out) ----
+# decode-lofo trains the probe direction on 3 framing families and projects the
+# 4th (every score out-of-family), and saves the full-data direction (+controls)
+# to vectors.npz for steering. Replaces the old vectors+decode pair.
+$RUN decode-lofo --model "$MODEL" --layer "$LAYER" --dtype "$DTYPE" \
+  --holdout-prompts "$HOLDOUT" \
+  --save-vectors "$OUT/vectors.npz" --out "$OUT/decode.json"
 
 # ---- 2. pre-registered correctness checks (abort on failure) ----
 $RUN steer --model "$MODEL" --layer "$LAYER" --dtype "$DTYPE" \
   --vectors "$OUT/vectors.npz" --wrong-layer "$WRONG_LAYER" \
   --steer-prompts "$PROMPTS/steer_prompts.jsonl" --test
-
-# ---- 3. decodability ----
-$RUN decode --model "$MODEL" --layer "$LAYER" --dtype "$DTYPE" \
-  --vectors "$OUT/vectors.npz" \
-  --holdout-prompts "$PROMPTS/controlled_holdout_v2.jsonl" --out "$OUT/decode.json"
 
 # ---- 4. steered generations + efficacy ----
 $RUN steer --model "$MODEL" --layer "$LAYER" --dtype "$DTYPE" \
@@ -91,9 +99,9 @@ $RUN judge --generations "$OUT/steer.jsonl" \
 # ---- 6. bundle + audit ----
 $RUN bundle --decode "$OUT/decode.json" --steer "$OUT/steer.jsonl" \
   --judged "$OUT/judged.jsonl" --model "$MODEL" --layer "$LAYER" \
-  --direction-source "mean-diff (eval-deploy), z-scored, unit norm, L$LAYER" \
-  --prompt-distribution "MS test-awareness contrast + controlled_holdout_v2 (4 families)" \
-  --prompt-license "MS triggers MIT; holdout per alignment-evals DATA_POLICY" \
+  --direction-source "mean-diff (eval-deploy), z-scored, unit norm, L$LAYER, last-token, leave-one-family-out" \
+  --prompt-distribution "controlled_holdout_v3 (4 disjoint-lexicon framing families; tfidf LOFO AUROC ~0.48)" \
+  --prompt-license "holdout per alignment-evals DATA_POLICY" \
   --metric "$METRIC" --attest-out-of-sample --out "$OUT/bundle.json"
 
 sieve audit --bundle "$OUT/bundle.json" --out "$OUT" --name "qwen3_l${LAYER}"

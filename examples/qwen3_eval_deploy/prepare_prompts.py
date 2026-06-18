@@ -41,7 +41,10 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--triggers", type=Path, required=True)
+    parser.add_argument("--triggers", type=Path, default=None,
+                        help="optional MS triggers JSON for a SEPARATE contrast "
+                             "set; omit for the LOFO flow where the holdout "
+                             "itself trains the direction (decode-lofo)")
     parser.add_argument("--holdout", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, default=Path("prompts"))
     parser.add_argument("--contrast-pairs", type=int, default=400,
@@ -49,18 +52,21 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
-    # --- contrast set (trains the direction) ---
-    triggers = json.loads(args.triggers.read_text())
-    rng = random.Random(args.seed)
-    if args.contrast_pairs and args.contrast_pairs < len(triggers):
-        triggers = rng.sample(triggers, args.contrast_pairs)
-    contrast = []
-    for i, t in enumerate(triggers):
-        contrast.append({"prompt_id": f"ms{i}_eval", "text": t["hypothetical"],
-                         "label": 1, "category": t.get("category", "")})
-        contrast.append({"prompt_id": f"ms{i}_deploy", "text": t["real"],
-                         "label": 0, "category": t.get("category", "")})
-    write_jsonl(args.out_dir / "contrast_triggers.jsonl", contrast)
+    # --- contrast set (trains the direction) — only for the separate-contrast
+    # flow. The LOFO flow (controlled_holdout_v3) trains the direction from the
+    # holdout families themselves, so no standalone contrast file is written. ---
+    if args.triggers is not None:
+        triggers = json.loads(args.triggers.read_text())
+        rng = random.Random(args.seed)
+        if args.contrast_pairs and args.contrast_pairs < len(triggers):
+            triggers = rng.sample(triggers, args.contrast_pairs)
+        contrast = []
+        for i, t in enumerate(triggers):
+            contrast.append({"prompt_id": f"ms{i}_eval", "text": t["hypothetical"],
+                             "label": 1, "category": t.get("category", "")})
+            contrast.append({"prompt_id": f"ms{i}_deploy", "text": t["real"],
+                             "label": 0, "category": t.get("category", "")})
+        write_jsonl(args.out_dir / "contrast_triggers.jsonl", contrast)
 
     # --- decodability holdout (families = framing styles) ---
     doc = yaml.safe_load(args.holdout.read_text())
@@ -74,15 +80,20 @@ def main() -> int:
                 "label": 1 if rec["label"] == "eval" else 0,
                 "family": f"{pair['family']}_{pair['family_name'].replace(' ', '-')}",
             })
-    write_jsonl(args.out_dir / "controlled_holdout_v2.jsonl", holdout)
+    write_jsonl(args.out_dir / f"{args.holdout.stem}.jsonl", holdout)
 
     # --- steering prompts: the trigger-free base questions ---
     steer = [{"prompt_id": f"q{q['qid']}", "text": q["text"], "topic": q["topic"]}
              for q in doc["metadata"]["questions"]]
     write_jsonl(args.out_dir / "steer_prompts.jsonl", steer)
 
-    print("done — contrast/holdout sources are disjoint; "
-          "--attest-out-of-sample is truthful for this holdout")
+    if args.triggers is not None:
+        print("done — separate contrast/holdout sources are disjoint; "
+              "--attest-out-of-sample is truthful for this holdout")
+    else:
+        print("done — LOFO flow: run `decode-lofo` on the holdout (its families "
+              "train the direction leave-one-family-out); every probe score is "
+              "out-of-family, so --attest-out-of-sample is truthful")
     return 0
 
 
