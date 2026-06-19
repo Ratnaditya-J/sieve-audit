@@ -78,6 +78,31 @@ class SteeringRecord:
 
 
 @dataclass
+class AblationRecord:
+    """One judged generation with a direction projected OUT of the residual stream.
+
+    The *necessity* counterpart to ``SteeringRecord``: instead of adding a
+    direction (sufficiency), the adapter removes it and judges the result. Arms:
+
+    - ``baseline``: no ablation (reference behavior),
+    - ``probe``: the audited direction projected out,
+    - ``ablate_random``: a random direction of equal norm projected out — the
+      matched control, without which "behavior changed after ablation" is
+      confounded by the generic effect of perturbing the forward pass.
+
+    Necessity = the probe-ablation behavioral DROP (baseline − probe) exceeds the
+    ablate-random drop. It is the complement to steering's sufficiency: a
+    direction can be necessary (ablating it removes the behavior) without being
+    sufficient (adding it does not induce the behavior), which is exactly the
+    distributed-mechanism case a steering-only verdict cannot see.
+    """
+
+    arm: str                        # "baseline" | "probe" | "ablate_random"
+    prompt_id: str
+    judge_scores: dict[str, float]  # judge name -> target-behavior score in [0, 1]
+
+
+@dataclass
 class EvidenceBundle:
     """Everything a SIEVE audit needs, recorded by an adapter."""
 
@@ -95,6 +120,9 @@ class EvidenceBundle:
     decodability: DecodabilityEvidence | None = None
     efficacy: list[EfficacyRecord] = field(default_factory=list)
     steering: list[SteeringRecord] = field(default_factory=list)
+    # optional necessity evidence (#2): empty by default, so a bundle without
+    # ablation audits exactly as before — the necessity gate is purely additive.
+    ablation: list[AblationRecord] = field(default_factory=list)
 
     bundle_version: str = "0.1"
 
@@ -111,6 +139,11 @@ class EvidenceBundle:
             key = ("eff", r.arm, r.alpha, r.prompt_id)
             if key in seen:
                 raise ValueError(f"duplicate efficacy record: {key}")
+            seen.add(key)
+        for r in self.ablation:
+            key = ("ablate", r.arm, r.prompt_id)
+            if key in seen:
+                raise ValueError(f"duplicate ablation record: {key}")
             seen.add(key)
 
     # ---- (de)serialization ----
@@ -136,6 +169,7 @@ class EvidenceBundle:
             decodability=DecodabilityEvidence(**dec) if dec else None,
             efficacy=[EfficacyRecord(**r) for r in d.get("efficacy", [])],
             steering=[SteeringRecord(**r) for r in d.get("steering", [])],
+            ablation=[AblationRecord(**r) for r in d.get("ablation", [])],
             bundle_version=d.get("bundle_version", "0.1"),
         )
 
@@ -148,6 +182,10 @@ class EvidenceBundle:
     @property
     def steering_arms(self) -> list[str]:
         return sorted({r.arm for r in self.steering})
+
+    @property
+    def ablation_arms(self) -> list[str]:
+        return sorted({r.arm for r in self.ablation})
 
     @property
     def judge_names(self) -> list[str]:
