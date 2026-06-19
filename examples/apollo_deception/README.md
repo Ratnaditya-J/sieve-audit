@@ -48,6 +48,24 @@ sieve audit --bundle /tmp/sieve-targets/bundle_pairs_probe.json --name apollo_pa
 sieve audit --bundle /tmp/sieve-targets/bundle_rp_probe.json --name apollo_rp_probe
 ```
 
+## Expected output
+
+Both audits return **`insufficient_protocol`** — SIEVE refuses a causal verdict
+because no steering/control evidence exists in the release. What it *can*
+certify (the decodability stage) it does:
+
+| Probe | Decodable (pooled, held-out) | Best surface baseline | Probe − baseline | Verdict |
+|---|---|---|---|---|
+| `pairs_probe` | **0.798** [0.780, 0.815] | 0.462 | **+0.336** | `insufficient_protocol` |
+| `rp_probe` | **0.723** [0.702, 0.743] | 0.462 | **+0.261** | `insufficient_protocol` |
+
+So the decodability claims survive a fair cross-dataset surface baseline (the
+probes clear it decisively), but the *causal* reading the probes are sometimes
+assumed to license is **not evaluable from what was published**. Full cards:
+[`reports/apollo_pairs_probe.md`](../../reports/apollo_pairs_probe.md),
+[`reports/apollo_rp_probe.md`](../../reports/apollo_rp_probe.md); narrative in
+[`reports/apollo_audit_summary.md`](../../reports/apollo_audit_summary.md).
+
 ## Method notes
 
 - Probe score per example: mean per-token score over the assistant's content
