@@ -29,6 +29,9 @@
   "wrong_layer"
  ],
  "seed": 0,
+ "tested_interventions": [
+  "single-layer additive steering"
+ ],
  "diagnostics": {
   "decision_reasons": [
    "probe effect exceeds all matched controls, dose-responsive, judge-agreed"

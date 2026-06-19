@@ -29,6 +29,9 @@
   "wrong_layer"
  ],
  "seed": 0,
+ "tested_interventions": [
+  "single-layer additive steering"
+ ],
  "diagnostics": {
   "decision_reasons": [
    "probe-arm effect does not exceed all matched controls",
@@ -349,7 +352,8 @@
  "status": "ok",
  "allowed_claims": [
   "Under [model=synthetic/ground-truth-not-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is linearly decodable and beats surface baselines.",
-  "Under [model=synthetic/ground-truth-not-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal did NOT pass causal-sufficiency controls; treat it as a correlational diagnostic, not a validated monitor."
+  "Under [model=synthetic/ground-truth-not-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal did NOT pass causal-sufficiency controls; treat it as a correlational diagnostic, not a validated monitor.",
+  "This verdict is BOUNDED to the tested intervention(s) [single-layer additive steering]: it does NOT establish the signal is causally inert. Distributed/multi-layer mechanisms and necessity (ablation) were not tested and could still reveal causal involvement."
  ],
  "disallowed_claims": [
   "The signal is causally inert (only sufficiency under this scope was tested, not necessity).",

@@ -1,6 +1,8 @@
 # SIEVE audit card — `intervention_ineffective`
 
-> **Verdict: intervention_ineffective** (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `5ddd620e355ccf1f73dd550a5ca947c119ac88dcbe5bbc237b7a32e222f06b9a`)
+> **Verdict: intervention_ineffective** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `5ddd620e355ccf1f73dd550a5ca947c119ac88dcbe5bbc237b7a32e222f06b9a`)
+>
+> **Tested intervention(s):** single-layer additive steering  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
 > **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 

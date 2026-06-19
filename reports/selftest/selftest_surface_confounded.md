@@ -1,6 +1,8 @@
 # SIEVE audit card — `surface_confounded`
 
-> **Verdict: surface_confounded** (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`)
+> **Verdict: surface_confounded** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`)
+>
+> **Tested intervention(s):** single-layer additive steering  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
 > **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 

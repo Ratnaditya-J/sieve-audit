@@ -1,6 +1,8 @@
 # SIEVE audit card — `causally_sufficient`
 
-> **Verdict: causally_sufficient** (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `4f99240a1bb140307de795cb465f1c3954ba33d70455d6b29c65ab705f6d4eab`)
+> **Verdict: causally_sufficient** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `4f99240a1bb140307de795cb465f1c3954ba33d70455d6b29c65ab705f6d4eab`)
+>
+> **Tested intervention(s):** single-layer additive steering  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
 > **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 

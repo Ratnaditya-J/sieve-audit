@@ -58,6 +58,12 @@ class AuditCard:
     controls: list[str]            # e.g. ["random", "orthogonal", "wrong_layer"]
     seed: int
 
+    # causal intervention(s) actually run (e.g. "single-layer additive steering");
+    # causal verdicts are BOUNDED to these — a negative verdict does not transcend
+    # the method that produced it (a direction may be causal via a mechanism an
+    # untested intervention would reveal). Grows as more interventions are added.
+    tested_interventions: list[str] = field(default_factory=list)
+
     # --- results ---
     diagnostics: dict = field(default_factory=dict)
     verdict: Verdict | None = None
@@ -249,6 +255,7 @@ ALLOWED_CLAIMS: dict[Verdict, list[str]] = {
     Verdict.NOT_CAUSALLY_SUFFICIENT: [
         "Under {scope}, the signal is linearly decodable and beats surface baselines.",
         "Under {scope}, the signal did NOT pass causal-sufficiency controls; treat it as a correlational diagnostic, not a validated monitor.",
+        "This verdict is BOUNDED to the tested intervention(s) [{interventions}]: it does NOT establish the signal is causally inert. Distributed/multi-layer mechanisms and necessity (ablation) were not tested and could still reveal causal involvement.",
     ],
     Verdict.CAUSALLY_SUFFICIENT: [
         "Under {scope}, steering along the signal changed behavior more than matched random/orthogonal/wrong-layer controls, with monotone dose-response and judge agreement.",

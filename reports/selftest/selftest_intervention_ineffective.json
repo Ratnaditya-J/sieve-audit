@@ -29,6 +29,9 @@
   "wrong_layer"
  ],
  "seed": 0,
+ "tested_interventions": [
+  "single-layer additive steering"
+ ],
  "diagnostics": {
   "decision_reasons": [
    "intervention did not take effect; causality is UNTESTED, not absent",

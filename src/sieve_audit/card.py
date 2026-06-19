@@ -55,6 +55,14 @@ def build_card(
     prereg_check=None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
+    # Causal intervention(s) actually run; causal verdicts are bounded to these so
+    # the verdict can never be quoted as a method-transcending claim.
+    tested_interventions = (
+        ["single-layer additive steering"]
+        if (efficacy is not None or controls is not None)
+        else []
+    )
+    interventions_str = ", ".join(tested_interventions) or "none (causal stage not run)"
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
     bundle_hash = _canonical_hash(bundle.to_dict())
 
@@ -87,7 +95,10 @@ def build_card(
         diagnostics["controls"] = controls.to_dict()
 
     if decision.verdict is not None:
-        allowed = [c.format(scope=scope) for c in ALLOWED_CLAIMS[decision.verdict]]
+        allowed = [
+            c.format(scope=scope, interventions=interventions_str)
+            for c in ALLOWED_CLAIMS[decision.verdict]
+        ]
         disallowed = DISALLOWED_CLAIMS[decision.verdict] + DISALLOWED_CLAIMS_ALWAYS
     else:
         # protocol incomplete: no causal claim — but a cleanly-passed
@@ -144,6 +155,7 @@ def build_card(
         judges=bundle.judge_names,
         controls=bundle.steering_arms,
         seed=cfg.seed,
+        tested_interventions=tested_interventions,
         diagnostics=diagnostics,
         verdict=decision.verdict,
         status=decision.status,
@@ -197,11 +209,22 @@ def _profile_line(card: AuditCard) -> str:
 
 def card_to_markdown(card: AuditCard) -> str:
     verdict_str = card.verdict.value if card.verdict else card.status
+    interv = ", ".join(card.tested_interventions)
     lines = [
         f"# SIEVE audit card — `{verdict_str}`",
         "",
-        f"> **Verdict: {verdict_str}** (protocol v{card.protocol_version}, "
+        f"> **Verdict: {verdict_str}**"
+        + (f" — under {interv}" if interv else "")
+        + f" (protocol v{card.protocol_version}, "
         f"config `{card.config_hash}`, bundle `{card.bundle_hash}`)",
+        ">",
+        f"> **Tested intervention(s):** {interv or '— (causal stage not run)'}"
+        + (
+            "  ·  causal verdicts are bounded to these; necessity (ablation) and "
+            "distributed/multi-layer mechanisms were not tested"
+            if interv
+            else ""
+        ),
         ">",
         f"> {_profile_line(card)}",
     ]

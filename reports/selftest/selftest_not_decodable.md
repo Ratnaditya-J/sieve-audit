@@ -1,6 +1,8 @@
 # SIEVE audit card — `not_decodable`
 
-> **Verdict: not_decodable** (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `6d7b0f572d971ef86c8ee85b96442959139b79cdc0ae9167baed6a91325fdcb2`)
+> **Verdict: not_decodable** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `6d7b0f572d971ef86c8ee85b96442959139b79cdc0ae9167baed6a91325fdcb2`)
+>
+> **Tested intervention(s):** single-layer additive steering  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
 > **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 

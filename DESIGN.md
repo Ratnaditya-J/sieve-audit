@@ -29,6 +29,16 @@ Anything outside that sentence is out of scope for v0.1 (see §8).
 4. **not_causally_sufficient** — intervention effective, but effect ≤ random / orthogonal / wrong-layer controls. *(e.g., Qwen3-32B L55, gpt-oss-120b L15.)*
 5. **causally_sufficient** — exceeds all controls, dose-responsive, and judge-agreed.
 
+**Verdicts are method-scoped.** The causal verdicts (`not_causally_sufficient`,
+`causally_sufficient`) are *bounded to the intervention(s) actually run* — recorded on
+the card as `tested_interventions` and rendered inline with the verdict ("under
+single-layer additive steering"). `not_causally_sufficient` therefore means "not
+sufficient **under the tested intervention(s)**"; it does **not** establish the signal is
+causally inert — distributed/multi-layer mechanisms and necessity (ablation) are untested
+and could still reveal causal involvement. SIEVE holds its own verdicts to the discipline
+it demands of probes: no single method's result may masquerade as a method-transcending
+claim. (Necessity/ablation and multi-method agreement: roadmap, §8.)
+
 ## 4. Pipeline — own vs. wrap
 
 **Own (the differentiated spine):**

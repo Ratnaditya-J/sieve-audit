@@ -1,6 +1,8 @@
 # SIEVE audit card — `not_causally_sufficient`
 
-> **Verdict: not_causally_sufficient** (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `a0aa98bc2f79d7c0180d6337902061f73ea4ff7023c45dbcdcea499db1da7cb1`)
+> **Verdict: not_causally_sufficient** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `a0aa98bc2f79d7c0180d6337902061f73ea4ff7023c45dbcdcea499db1da7cb1`)
+>
+> **Tested intervention(s):** single-layer additive steering  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
 > **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 
@@ -42,6 +44,7 @@
 
 - Under [model=synthetic/ground-truth-not-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is linearly decodable and beats surface baselines.
 - Under [model=synthetic/ground-truth-not-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal did NOT pass causal-sufficiency controls; treat it as a correlational diagnostic, not a validated monitor.
+- This verdict is BOUNDED to the tested intervention(s) [single-layer additive steering]: it does NOT establish the signal is causally inert. Distributed/multi-layer mechanisms and necessity (ablation) were not tested and could still reveal causal involvement.
 
 ## Disallowed claims
 

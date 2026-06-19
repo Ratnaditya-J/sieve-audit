@@ -1,6 +1,8 @@
 # SIEVE audit card — `insufficient_protocol`
 
-> **Verdict: insufficient_protocol** (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `637cc31eea32436aa9798211aa43ef22e2477b6be94f69cba9f97c0a7ee62679`)
+> **Verdict: insufficient_protocol** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `637cc31eea32436aa9798211aa43ef22e2477b6be94f69cba9f97c0a7ee62679`)
+>
+> **Tested intervention(s):** single-layer additive steering  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
 > **Profile:** ✅ SIEVE-v0.1-strict (the standard bar)
 
