@@ -88,3 +88,22 @@ def test_inconclusive_without_random_control():
     assert res.inconclusive
     assert not res.necessary
     assert not res.has_random_control
+
+
+def test_necessity_enriches_not_causally_sufficient_card_end_to_end():
+    """Wiring (#2b-ii): attaching 'necessary' ablation evidence to a
+    not_causally_sufficient audit must (a) leave the sufficiency verdict intact,
+    (b) add 'ablation' to tested_interventions, and (c) surface the
+    'necessary -> not causally inert' claim and necessity diagnostics."""
+    from sieve_audit import run_audit
+    from sieve_audit.synth import SCENARIOS
+
+    bundle = SCENARIOS["not_causally_sufficient"]()
+    bundle.ablation = _abl(30, base=0.9, probe=0.2, rand=0.88)  # necessary
+    result = run_audit(bundle)
+    card = result.card
+    assert card.verdict.value == "not_causally_sufficient"
+    assert "ablation" in card.tested_interventions
+    assert result.necessity is not None and result.necessity.necessary
+    assert card.diagnostics["necessity"]["necessary"] is True
+    assert any("IS necessary" in c for c in card.allowed_claims)

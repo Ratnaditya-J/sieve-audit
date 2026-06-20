@@ -53,6 +53,7 @@ def build_card(
     controls: ControlsResult | None,
     bundle_path: str | None = None,
     prereg_check=None,
+    necessity=None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
     # Causal intervention(s) actually run; causal verdicts are bounded to these so
@@ -62,6 +63,31 @@ def build_card(
         if (efficacy is not None or controls is not None)
         else []
     )
+    necessity_claims: list[str] = []
+    necessity_risks: list[str] = []
+    if necessity is not None:
+        if necessity.inconclusive:
+            necessity_risks.append(
+                "Necessity (ablation) evidence was provided but could not be "
+                "adjudicated: " + "; ".join(necessity.notes)
+            )
+        else:
+            tested_interventions = tested_interventions + ["ablation"]
+            if necessity.necessary:
+                necessity_claims.append(
+                    "Under ablation, the signal IS necessary: removing it degrades "
+                    "the behavior more than an ablate_random control. A "
+                    "not_causally_sufficient verdict here is consistent with a "
+                    "distributed/multi-layer mechanism that single-layer additive "
+                    "steering cannot induce — the signal is NOT causally inert."
+                )
+            else:
+                necessity_claims.append(
+                    "Under ablation, the signal is also NOT necessary: removing it "
+                    "degrades the behavior no more than an ablate_random control — "
+                    "convergent evidence of a limited causal role under the tested "
+                    "interventions."
+                )
     interventions_str = ", ".join(tested_interventions) or "none (causal stage not run)"
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
     bundle_hash = _canonical_hash(bundle.to_dict())
@@ -93,6 +119,8 @@ def build_card(
         diagnostics["efficacy"] = {arm: res.to_dict() for arm, res in efficacy.items()}
     if controls is not None:
         diagnostics["controls"] = controls.to_dict()
+    if necessity is not None:
+        diagnostics["necessity"] = necessity.to_dict()
 
     if decision.verdict is not None:
         allowed = [
@@ -125,6 +153,8 @@ def build_card(
             ]
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
+    allowed = allowed + necessity_claims
+
     risks = list(RESIDUAL_RISKS_COMMON)
     if risks_prereg:
         risks.insert(0, risks_prereg)
@@ -141,6 +171,7 @@ def build_card(
     if efficacy is not None:
         for arm, res in sorted(efficacy.items()):
             risks.extend(f"[{arm}] {n}" for n in res.notes)
+    risks.extend(necessity_risks)
 
     return AuditCard(
         model=bundle.model,
@@ -293,6 +324,19 @@ def card_to_markdown(card: AuditCard) -> str:
                 lines.append(
                     f"- |probe| − |{control}| @α={alpha}: {_fmt_ci(diff)}"
                 )
+    nec = card.diagnostics.get("necessity")
+    if nec:
+        if nec["inconclusive"]:
+            lines.append(
+                "- Necessity (ablation): inconclusive — " + "; ".join(nec["notes"])
+            )
+        else:
+            lines.append(
+                f"- Necessity (ablation): "
+                f"{'NECESSARY' if nec['necessary'] else 'not necessary'} "
+                f"(probe-ablation drop {_fmt_ci(nec['probe_drop'])}; "
+                f"vs ablate_random {_fmt_ci(nec['probe_vs_random_drop'])})"
+            )
     lines += ["", "### Decision reasons", ""]
     lines += [f"- {r}" for r in card.diagnostics.get("decision_reasons", [])]
 

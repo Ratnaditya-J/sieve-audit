@@ -27,6 +27,7 @@ from .config import CANONICAL_CONTROLS, AuditConfig
 from .controls import PROBE_ARM, ControlsResult, run_controls
 from .decodability import DecodabilityResult, run_decodability
 from .efficacy import EfficacyResult, run_efficacy_all_arms
+from .necessity import NecessityResult, run_necessity
 from .verdict import AuditCard, Decision, decide
 
 
@@ -36,6 +37,7 @@ class AuditResult:
     decodability: DecodabilityResult | None
     efficacy: dict[str, EfficacyResult] | None   # per steering arm
     controls: ControlsResult | None
+    necessity: NecessityResult | None = None     # optional ablation gate (#2)
 
 
 def _cross_stage_gaps(
@@ -159,6 +161,14 @@ def run_audit(
             controls = run_controls(bundle.steering, cfg)
         except ValueError as exc:
             hard_gaps.append(f"steering stage failed: {exc}")
+    necessity = None
+    if bundle.ablation:
+        try:
+            necessity = run_necessity(bundle.ablation, cfg)
+        except ValueError:
+            # necessity is additive; a failure must not block the sufficiency
+            # verdict — it simply omits the necessity finding from the card.
+            necessity = None
 
     hard_gaps.extend(_cross_stage_gaps(bundle, efficacy, controls, cfg))
 
@@ -187,6 +197,13 @@ def run_audit(
         prereg_check = verify_prereg(prereg, bundle, cfg)
 
     card = build_card(
-        bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check
+        bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check,
+        necessity,
     )
-    return AuditResult(card=card, decodability=decod, efficacy=efficacy, controls=controls)
+    return AuditResult(
+        card=card,
+        decodability=decod,
+        efficacy=efficacy,
+        controls=controls,
+        necessity=necessity,
+    )
