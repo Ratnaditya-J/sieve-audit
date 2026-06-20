@@ -41,6 +41,7 @@ from pathlib import Path
 import numpy as np
 
 from ..bundle import (
+    AblationRecord,
     DecodabilityEvidence,
     EfficacyRecord,
     EvidenceBundle,
@@ -132,6 +133,44 @@ class SteeringHook:
         modified = hidden + delta.view(1, 1, -1)
         # measure what the model actually received (post-dtype-rounding)
         self.delta_norm = float((modified[0] - hidden[0]).norm(dim=-1).mean())
+        if isinstance(output, tuple):
+            return (modified,) + output[1:]
+        return modified
+
+    def register(self, model, layer_idx: int):
+        self.handle = _get_layer_module(model, layer_idx).register_forward_hook(self)
+
+    def remove(self):
+        if self.handle is not None:
+            self.handle.remove()
+            self.handle = None
+
+
+class AblationHook:
+    """Projects a unit `direction` OUT of the block output at the hooked layer,
+    at EVERY position (prefill AND decode) — directional ablation: h -> h - (h.w)w.
+
+    The necessity counterpart to SteeringHook (which *adds* a direction). Unlike
+    steering, ablation must apply at decode steps too: the point is that the
+    model never gets to use the direction while generating. `direction` must be
+    unit-norm. Records the mean per-position norm removed (a liveness check: a
+    zero-norm or orthogonal-everywhere "direction" removes ~nothing)."""
+
+    def __init__(self, direction):
+        self.direction = direction          # torch (d_model,), unit norm
+        self.handle = None
+        self.base_norm: float | None = None
+        self.removed_norm: float | None = None
+
+    def __call__(self, module, args, output):
+        hidden = output[0] if isinstance(output, tuple) else output
+        if hidden.dim() != 3:
+            return output
+        w = self.direction.to(hidden.dtype).to(hidden.device).view(1, 1, -1)
+        coef = (hidden * w).sum(dim=-1, keepdim=True)   # projection onto w per position
+        modified = hidden - coef * w
+        self.base_norm = float(hidden[0].norm(dim=-1).mean())
+        self.removed_norm = float((hidden[0] - modified[0]).norm(dim=-1).mean())
         if isinstance(output, tuple):
             return (modified,) + output[1:]
         return modified
@@ -808,6 +847,119 @@ def cmd_bundle(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# subcommand: ablate (necessity evidence) + bundle-ablation
+# ---------------------------------------------------------------------------
+
+
+def cmd_ablate(args) -> int:
+    """Generate baseline / probe-ablated / random-ablated outputs for the
+    necessity gate. Reuses the probe direction (+ random control) from a
+    `vectors`/`decode-lofo` .npz. Records carry alpha=0.0 so the same `judge`
+    subcommand scores them unchanged."""
+    import torch
+
+    model, tokenizer = _load_model(args)
+    sv = np.load(args.vectors)
+    dirs = {
+        "probe": sv["probe"] / (np.linalg.norm(sv["probe"]) + 1e-12),
+        "ablate_random": sv["random"] / (np.linalg.norm(sv["random"]) + 1e-12),
+    }
+    prompts = _load_labeled_prompts(args.eval_prompts)
+
+    if args.test:
+        _run_ablation_tests(model, tokenizer, dirs["probe"], args.layer)
+        return 0
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    arms = ["baseline", "probe", "ablate_random"]
+    n_total = len(prompts) * len(arms)
+    print(f"[ablate] {len(prompts)} prompts x {len(arms)} arms = {n_total} generations")
+    done = 0
+    with out.open("w") as fout:
+        for arm in arms:
+            hook = None
+            if arm != "baseline":
+                w = torch.from_numpy(dirs[arm]).to(_input_device(model))
+                hook = AblationHook(w)
+            for p in prompts:
+                pid = p.get("prompt_id", p.get("id", "p?"))
+                text = _generate(model, tokenizer, p["text"], hook, args.layer,
+                                 args.max_new_tokens)
+                fout.write(json.dumps({
+                    "arm": arm, "alpha": 0.0, "prompt_id": pid,
+                    "layer": args.layer, "generated_text": text,
+                    "removed_norm": (hook.removed_norm if hook else 0.0),
+                }) + "\n")
+                fout.flush()
+                done += 1
+                if done % 20 == 0:
+                    print(f"  {done}/{n_total}")
+    print(f"[ablate] -> {out}   (next: judge, then bundle-ablation)")
+    return 0
+
+
+def _run_ablation_tests(model, tokenizer, w_np, layer: int) -> None:
+    """Correctness checks for directional ablation (run on the pod)."""
+    import torch
+
+    w = torch.from_numpy(w_np / (np.linalg.norm(w_np) + 1e-12)).to(_input_device(model))
+    prompt = "Briefly: what is the capital of France?"
+    print("[A1] baseline vs ablated may differ (ablation has an effect)")
+    base = _generate(model, tokenizer, prompt, None, layer, 20)
+    abl = _generate(model, tokenizer, prompt, AblationHook(w), layer, 20)
+    print("  " + ("PASS (differ)" if abl != base else "WARNING: identical — direction may be inert here"))
+    print("[A2] removed-norm > 0 (the direction was actually present/removed)")
+    h = AblationHook(w)
+    _generate(model, tokenizer, prompt, h, layer, 4)
+    assert h.removed_norm and h.removed_norm > 0, "A2 FAILED: nothing was removed"
+    print(f"  PASS (mean removed norm {h.removed_norm:.4f})")
+    print("[A3] hook removed afterwards")
+    after = _generate(model, tokenizer, prompt, None, layer, 20)
+    assert after == base, "A3 FAILED: residue from a previous hook"
+    print("  PASS")
+    print("[ablate --test] checks passed")
+
+
+def cmd_bundle_ablation(args) -> int:
+    """Assemble an ablation-only EvidenceBundle (the necessity gate runs on it;
+    attach to a steering bundle, or audit on its own for a necessity verdict)."""
+    judged = [json.loads(l) for l in Path(args.judged).read_text().splitlines() if l.strip()]
+    ablation = [
+        AblationRecord(
+            arm=r["arm"],
+            prompt_id=r["prompt_id"],
+            judge_scores={k: v for k, v in r["judge_scores"].items()
+                          if isinstance(v, (int, float)) and math.isfinite(v)},
+        )
+        for r in judged
+    ]
+    n_before = len(ablation)
+    ablation = [r for r in ablation if len(r.judge_scores) >= 2]
+    if n_before - len(ablation):
+        print(f"[bundle-ablation] WARNING: dropped {n_before - len(ablation)}/{n_before} "
+              "records with < 2 finite judge scores")
+
+    bundle = EvidenceBundle(
+        model=args.model,
+        revision=args.revision,
+        layers=[args.layer],
+        direction_source=args.direction_source,
+        prompt_distribution=args.prompt_distribution,
+        prompt_license=args.prompt_license,
+        behavioral_metrics=[args.metric],
+        adapter="sieve_audit.adapters.hf_steering_runner:ablate-0.1",
+        ablation=ablation,
+    )
+    bundle.validate()
+    bundle.save(args.out)
+    print(f"[bundle-ablation] {len(ablation)} ablation records "
+          f"({sorted({r.arm for r in ablation})}) -> {args.out}")
+    print(f"[bundle-ablation] next: sieve audit --bundle {args.out}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -912,6 +1064,33 @@ def main(argv: list[str] | None = None) -> int:
                    help="attest that no holdout example trained the direction")
     p.add_argument("--out", required=True)
     p.set_defaults(func=cmd_bundle)
+
+    p = sub.add_parser("ablate",
+                       help="baseline/probe/ablate_random generations (necessity)")
+    add_model_args(p)
+    p.add_argument("--vectors", type=Path, required=True,
+                   help=".npz with 'probe' and 'random' directions (from vectors/decode-lofo)")
+    p.add_argument("--eval-prompts", type=Path, required=True,
+                   help="JSONL: {prompt_id, text} prompts that elicit the behavior")
+    p.add_argument("--max-new-tokens", type=int, default=200)
+    p.add_argument("--test", action="store_true",
+                   help="run ablation correctness checks (A1-A3) and exit")
+    p.add_argument("--out", default="ablate_generations.jsonl")
+    p.set_defaults(func=cmd_ablate)
+
+    p = sub.add_parser("bundle-ablation",
+                       help="assemble an ablation EvidenceBundle (necessity gate)")
+    p.add_argument("--judged", type=Path, required=True,
+                   help="judged ablation generations (from the `judge` subcommand)")
+    p.add_argument("--model", required=True)
+    p.add_argument("--revision", default=None)
+    p.add_argument("--layer", type=int, required=True)
+    p.add_argument("--direction-source", required=True)
+    p.add_argument("--prompt-distribution", required=True)
+    p.add_argument("--prompt-license", required=True)
+    p.add_argument("--metric", default="refusal")
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_bundle_ablation)
 
     args = parser.parse_args(argv)
     return args.func(args)
