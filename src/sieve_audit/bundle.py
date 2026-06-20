@@ -103,6 +103,30 @@ class AblationRecord:
 
 
 @dataclass
+class DeploymentEvidence:
+    """Optional off-distribution probe scores for the deployment lens.
+
+    The decodability eval characterizes the probe on its own prompt mix; a
+    deployer cares about the *different* mix it will see in the wild. This holds
+    the probe scored on that other distribution so the lens can report the
+    in-the-wild miss rate, not just the in-distribution one. Without it, the lens
+    reports off-distribution as "not assessed".
+    """
+
+    distribution: str            # name of the off-distribution eval set
+    labels: list[int]
+    probe_scores: list[float]
+
+    def __post_init__(self) -> None:
+        if len(self.labels) != len(self.probe_scores):
+            raise ValueError("deployment evidence fields must have equal length")
+        if len(self.labels) == 0:
+            raise ValueError("deployment evidence is empty")
+        if set(self.labels) - {0, 1}:
+            raise ValueError("labels must be 0/1")
+
+
+@dataclass
 class MultiLayerRecord:
     """One judged generation with a *joint multi-layer* intervention.
 
@@ -184,6 +208,9 @@ class EvidenceBundle:
     # optional leakage evidence (Tier-2): probe scores under full / leak-removed
     # / random-removed inputs; absent by default, so the gate is purely additive.
     leakage: "LeakageEvidence | None" = None
+    # optional off-distribution probe scores for the deployment lens; absent by
+    # default, in which case the lens reports off-distribution as "not assessed".
+    deployment: "DeploymentEvidence | None" = None
 
     bundle_version: str = "0.1"
 
@@ -224,6 +251,7 @@ class EvidenceBundle:
     def from_dict(cls, d: dict) -> "EvidenceBundle":
         dec = d.get("decodability")
         lk = d.get("leakage")
+        dep = d.get("deployment")
         return cls(
             model=d["model"],
             revision=d.get("revision"),
@@ -239,6 +267,7 @@ class EvidenceBundle:
             ablation=[AblationRecord(**r) for r in d.get("ablation", [])],
             multilayer=[MultiLayerRecord(**r) for r in d.get("multilayer", [])],
             leakage=LeakageEvidence(**lk) if lk else None,
+            deployment=DeploymentEvidence(**dep) if dep else None,
             bundle_version=d.get("bundle_version", "0.1"),
         )
 

@@ -35,6 +35,14 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     )
     print(f"[sieve] verdict: {verdict}")
     print(f"[sieve] card: {md_path} (+ {json_path.name})")
+    if result.card.diagnostics.get("deployment"):
+        print(f"[sieve] deployment report: {Path(args.out) / (stem + '.html')} "
+              f"(+ {stem}.roc.svg)")
+        if args.pdf:
+            from .report import write_pdf
+
+            pdf_path = write_pdf(result.card, Path(args.out) / f"{stem}.pdf")
+            print(f"[sieve] deployment PDF: {pdf_path}")
     pre = result.card.preregistration
     if pre is not None:
         print(
@@ -120,6 +128,11 @@ def main(argv: list[str] | None = None) -> int:
         "--prereg",
         default=None,
         help="verify the run against a pre-registration JSON (from `sieve prereg`)",
+    )
+    p_audit.add_argument(
+        "--pdf",
+        action="store_true",
+        help="also render a PDF deployment report (needs matplotlib)",
     )
     p_audit.set_defaults(func=_cmd_audit)
 

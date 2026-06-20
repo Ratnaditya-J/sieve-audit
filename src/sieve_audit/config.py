@@ -71,6 +71,7 @@ _PROFILE_EXEMPT: frozenset[str] = frozenset({
     "seed",                      # RNG only
     "judge_binarize_threshold",  # non-monotone: moving it either way relabels records
     "required_controls",         # special-cased in _classify_deviation
+    "deployment_fpr_targets",    # reporting-only: FPR budgets for the deployment lens
 })
 
 
@@ -127,9 +128,14 @@ class AuditConfig:
     # more than random-span removal, to flag the probe as leaky.
     leakage_min_drop: float = 0.05
 
+    # --- deployment lens (reporting only; voids no verdict) ---
+    # false-alarm (FPR) budgets at which to report recall for practitioners.
+    deployment_fpr_targets: tuple[float, ...] = (0.01, 0.05, 0.10)
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["required_controls"] = list(self.required_controls)
+        d["deployment_fpr_targets"] = list(self.deployment_fpr_targets)
         return d
 
     def nondefault_fields(self) -> dict:

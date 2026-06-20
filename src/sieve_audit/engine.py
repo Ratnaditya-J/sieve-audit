@@ -27,6 +27,7 @@ from .config import CANONICAL_CONTROLS, AuditConfig
 from .controls import PROBE_ARM, ControlsResult, run_controls
 from .decodability import DecodabilityResult, run_decodability
 from .efficacy import EfficacyResult, run_efficacy_all_arms
+from .deployment import DeploymentLensResult, run_deployment
 from .leakage import LeakageResult, run_leakage
 from .multilayer import MultiLayerResult, run_multilayer
 from .necessity import NecessityResult, run_necessity
@@ -42,6 +43,7 @@ class AuditResult:
     necessity: NecessityResult | None = None     # optional ablation gate (#2)
     multilayer: MultiLayerResult | None = None    # optional joint multi-layer gate
     leakage: LeakageResult | None = None          # optional Tier-2 leakage gate
+    deployment: DeploymentLensResult | None = None  # optional practitioner FP/FN lens
 
 
 def _cross_stage_gaps(
@@ -185,6 +187,11 @@ def run_audit(
             leakage = run_leakage(bundle.leakage, cfg)
         except ValueError:
             leakage = None  # additive; never blocks the sufficiency verdict
+    deployment = None
+    try:
+        deployment = run_deployment(bundle, cfg)
+    except ValueError:
+        deployment = None  # reporting-only; never blocks the verdict
 
     hard_gaps.extend(_cross_stage_gaps(bundle, efficacy, controls, cfg))
 
@@ -214,7 +221,7 @@ def run_audit(
 
     card = build_card(
         bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check,
-        necessity, leakage, multilayer,
+        necessity, leakage, multilayer, deployment,
     )
     return AuditResult(
         card=card,
@@ -224,4 +231,5 @@ def run_audit(
         necessity=necessity,
         multilayer=multilayer,
         leakage=leakage,
+        deployment=deployment,
     )

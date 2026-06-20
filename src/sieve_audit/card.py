@@ -14,6 +14,7 @@ from pathlib import Path
 from .bundle import EvidenceBundle
 from .config import AuditConfig
 from .controls import ControlsResult
+from .deployment import roc_svg
 from .decodability import DecodabilityResult
 from .efficacy import EfficacyResult
 from .verdict import (
@@ -151,6 +152,7 @@ def build_card(
     necessity=None,
     leakage=None,
     multilayer=None,
+    deployment=None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
     # Causal intervention(s) actually run; causal verdicts are bounded to these so
@@ -270,6 +272,8 @@ def build_card(
         diagnostics["multilayer"] = multilayer.to_dict()
     if leakage is not None:
         diagnostics["leakage"] = leakage.to_dict()
+    if deployment is not None:
+        diagnostics["deployment"] = deployment.to_dict()
     diagnostics["causal_summary"] = _causal_summary(
         decision.verdict, necessity, multilayer
     )
@@ -328,6 +332,8 @@ def build_card(
             risks.extend(f"[{arm}] {n}" for n in res.notes)
     risks.extend(necessity_risks)
     risks.extend(multilayer_risks)
+    if deployment is not None:
+        risks.extend(f"[deployment] {n}" for n in deployment.notes)
     if leakage is not None and leakage.leaky:
         risks.insert(
             0,
@@ -530,6 +536,32 @@ def card_to_markdown(card: AuditCard) -> str:
     lines += ["", "### Decision reasons", ""]
     lines += [f"- {r}" for r in card.diagnostics.get("decision_reasons", [])]
 
+    dep = card.diagnostics.get("deployment")
+    if dep:
+        lines += ["", "## Deployment lens (practitioner FP/FN view)", ""]
+        lines += [f"- {p}" for p in dep["plain_language"]]
+        lines += [
+            "",
+            "| Condition | FPR budget | Recall (95% CI) |",
+            "| --- | --- | --- |",
+        ]
+        for name, pts in dep["operating_points"].items():
+            for p in pts:
+                r = p["recall"]
+                lines.append(
+                    f"| {name} | {p['fpr_target'] * 100:.0f}% | "
+                    f"{r['point'] * 100:.0f}% "
+                    f"[{r['lo'] * 100:.0f}%, {r['hi'] * 100:.0f}%] |"
+                )
+        lines += [
+            "",
+            "AUROC by condition: "
+            + ", ".join(f"{c['name']}={c['auroc']:.3f}" for c in dep["curves"]),
+            "",
+            "_ROC curves: see the `*.roc.svg` chart and `*.html` / `*.pdf` report "
+            "written alongside this card._",
+        ]
+
     lines += ["", "## Allowed claims (scope-bound; do not detach)", ""]
     lines += [f"- {c}" for c in card.allowed_claims]
     lines += ["", "## Disallowed claims", ""]
@@ -571,6 +603,60 @@ def card_to_markdown(card: AuditCard) -> str:
     return "\n".join(lines)
 
 
+def card_to_html(card: AuditCard) -> str:
+    """A self-contained deployment report: verdict header + plain-language lens +
+    operating-point table + inline ROC chart. Opens in any browser and prints to
+    PDF (File → Print → Save as PDF) with no dependency."""
+    verdict_str = card.label or (card.verdict.value if card.verdict else card.status)
+    dep = card.diagnostics.get("deployment")
+    svg = roc_svg(dep["curves"]) if dep else ""
+    plain = "".join(f"<li>{p}</li>" for p in (dep["plain_language"] if dep else []))
+    rows = ""
+    if dep:
+        for name, pts in dep["operating_points"].items():
+            for p in pts:
+                r = p["recall"]
+                rows += (
+                    f"<tr><td>{name}</td><td>{p['fpr_target'] * 100:.0f}%</td>"
+                    f"<td>{r['point'] * 100:.0f}% "
+                    f"[{r['lo'] * 100:.0f}%, {r['hi'] * 100:.0f}%]</td></tr>"
+                )
+    scope = (
+        f"{card.model}"
+        + (f" @ {card.revision}" if card.revision else "")
+        + f" · layer(s) {card.layers} · {card.direction_source} · "
+        f"{card.prompt_distribution}"
+    )
+    return f"""<!doctype html><meta charset="utf-8">
+<title>SIEVE deployment report — {verdict_str}</title>
+<style>
+  body {{ font-family: -apple-system, sans-serif; max-width: 760px; margin: 2rem auto;
+          color: #111; line-height: 1.5; padding: 0 1rem; }}
+  h1 {{ font-size: 1.4rem; }} h2 {{ font-size: 1.1rem; margin-top: 1.6rem; }}
+  .verdict {{ background:#f3f4f6; border-left:4px solid #2563eb; padding:.6rem .9rem;
+             border-radius:4px; font-weight:600; }}
+  .scope {{ color:#555; font-size:.9rem; }}
+  table {{ border-collapse: collapse; width: 100%; margin-top:.5rem; }}
+  th, td {{ border: 1px solid #ddd; padding: .35rem .6rem; text-align: left; font-size:.9rem; }}
+  th {{ background:#f9fafb; }}
+  .hint {{ color:#666; font-size:.85rem; }}
+  @media print {{ body {{ margin: 0; }} }}
+</style>
+<h1>SIEVE deployment report</h1>
+<p class="verdict">Verdict: {verdict_str}</p>
+<p class="scope">{scope}</p>
+<h2>What this means for a deployer</h2>
+<ul>{plain}</ul>
+<h2>Operating points</h2>
+<table><tr><th>Condition</th><th>FPR budget</th><th>Recall (95% CI)</th></tr>{rows}</table>
+<h2>ROC curves</h2>
+{svg}
+<p class="hint">Pick a threshold from the curve: lower it to miss fewer cases
+(more false alarms), raise it to cut false alarms (more misses). To save as PDF,
+use your browser's Print → Save as PDF.</p>
+"""
+
+
 def write_card(card: AuditCard, out_dir: str | Path, stem: str) -> tuple[Path, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -578,4 +664,10 @@ def write_card(card: AuditCard, out_dir: str | Path, stem: str) -> tuple[Path, P
     md_path = out / f"{stem}.md"
     json_path.write_text(card_to_json(card))
     md_path.write_text(card_to_markdown(card))
+    # deployment artifacts: a standalone ROC chart and a printable HTML report
+    if card.diagnostics.get("deployment"):
+        (out / f"{stem}.roc.svg").write_text(
+            roc_svg(card.diagnostics["deployment"]["curves"])
+        )
+        (out / f"{stem}.html").write_text(card_to_html(card))
     return json_path, md_path
