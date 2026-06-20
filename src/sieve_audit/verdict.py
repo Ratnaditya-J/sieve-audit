@@ -69,6 +69,11 @@ class AuditCard:
     verdict: Verdict | None = None
     # "ok" when a verdict was issued; INSUFFICIENT_PROTOCOL when SIEVE refused.
     status: str = "ok"
+    # human-facing headline that rolls the sufficiency verdict together with the
+    # necessity finding, so a real necessity result is never buried under a bare
+    # 'insufficient_protocol' (e.g. "necessary · sufficiency not established").
+    # The machine-readable verdict/status above are unchanged.
+    label: str = ""
 
     # --- claim calibration (DESIGN.md section 6) ---
     allowed_claims: list[str] = field(default_factory=list)

@@ -355,6 +355,7 @@
  },
  "verdict": "not_causally_sufficient",
  "status": "ok",
+ "label": "not_causally_sufficient",
  "allowed_claims": [
   "Under [model=synthetic/ground-truth-not-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is linearly decodable and beats surface baselines.",
   "Under [model=synthetic/ground-truth-not-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal did NOT pass causal-sufficiency controls; treat it as a correlational diagnostic, not a validated monitor.",

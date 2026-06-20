@@ -13,7 +13,8 @@ on a RunPod A100 (2026-06-20), then audited locally (GPU-free).
 
 | | value |
 |---|---|
-| verdict | `insufficient_protocol` (ablation-only bundle; no steering → no full causal verdict) |
+| headline label | **necessary · sufficiency not established** (the necessity finding is surfaced, not buried) |
+| machine verdict / status | `verdict=None` / `status=insufficient_protocol` (ablation-only bundle; no steering → no full causal verdict) |
 | necessity | **necessary = True** (n_paired = 32) |
 | probe-ablation refusal drop | **0.07 [0.011, 0.155]** (95% CI excludes 0) |
 | probe drop − ablate_random drop | **0.068 [0.006, 0.147]** (95% CI excludes 0) |

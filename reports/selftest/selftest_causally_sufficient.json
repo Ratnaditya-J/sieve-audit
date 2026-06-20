@@ -352,6 +352,7 @@
  },
  "verdict": "causally_sufficient",
  "status": "ok",
+ "label": "causally_sufficient",
  "allowed_claims": [
   "Under [model=synthetic/ground-truth-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], steering along the signal changed behavior more than matched random/orthogonal/wrong-layer controls, with monotone dose-response and judge agreement.",
   "Under [model=synthetic/ground-truth-causally-sufficient@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is causally sufficient for the measured behavioral metric(s)."

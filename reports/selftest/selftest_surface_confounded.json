@@ -352,6 +352,7 @@
  },
  "verdict": "surface_confounded",
  "status": "ok",
+ "label": "surface_confounded",
  "allowed_claims": [
   "Under [model=synthetic/ground-truth-surface-confounded@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is decodable but matched by a surface (text-statistics) baseline; no activation-level claim is warranted."
  ],

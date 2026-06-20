@@ -1,6 +1,6 @@
-# SIEVE audit card — `insufficient_protocol`
+# SIEVE audit card — `necessary · sufficiency not established`
 
-> **Verdict: insufficient_protocol** — under ablation (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `5b6b3ccaa9e3e2d97bb2a068c3dd6b39081f5615884009803c051c2e0e9d53e7`)
+> **Verdict: necessary · sufficiency not established** — under ablation (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `5b6b3ccaa9e3e2d97bb2a068c3dd6b39081f5615884009803c051c2e0e9d53e7`)
 >
 > **Tested intervention(s):** ablation  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
@@ -54,4 +54,4 @@
 ## Reproducibility
 
 - Protocol: v0.1; config hash `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`; bundle hash `5b6b3ccaa9e3e2d97bb2a068c3dd6b39081f5615884009803c051c2e0e9d53e7`
-- Re-run: `sieve audit --bundle /tmp/ablation_bundle.json --seed 0`
+- Re-run: `sieve audit --bundle examples/refusal_necessity/ablation_bundle.json --seed 0`

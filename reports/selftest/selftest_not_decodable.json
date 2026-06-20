@@ -352,6 +352,7 @@
  },
  "verdict": "not_decodable",
  "status": "ok",
+ "label": "not_decodable",
  "allowed_claims": [
   "Under [model=synthetic/ground-truth-not-decodable@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal was not decodable above chance on held-out examples."
  ],

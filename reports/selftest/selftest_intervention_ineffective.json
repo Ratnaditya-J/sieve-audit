@@ -371,6 +371,7 @@
  },
  "verdict": "intervention_ineffective",
  "status": "ok",
+ "label": "intervention_ineffective",
  "allowed_claims": [
   "Under [model=synthetic/ground-truth-intervention-ineffective@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is linearly decodable and beats surface baselines.",
   "The steering intervention did not take effect; the signal's causal status is UNKNOWN (inconclusive)."

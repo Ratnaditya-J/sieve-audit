@@ -99,6 +99,7 @@
  },
  "verdict": null,
  "status": "insufficient_protocol",
+ "label": "necessary \u00b7 sufficiency not established",
  "allowed_claims": [
   "None. The protocol was incomplete; no claim is licensed by this audit.",
   "Under ablation, the signal IS necessary: removing it degrades the behavior more than an ablate_random control. A not_causally_sufficient verdict here is consistent with a distributed/multi-layer mechanism that single-layer additive steering cannot induce \u2014 the signal is NOT causally inert."
@@ -118,6 +119,6 @@
  "protocol_version": "0.1",
  "config_hash": "7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd",
  "bundle_hash": "5b6b3ccaa9e3e2d97bb2a068c3dd6b39081f5615884009803c051c2e0e9d53e7",
- "rerun_command": "sieve audit --bundle /tmp/ablation_bundle.json --seed 0",
+ "rerun_command": "sieve audit --bundle examples/refusal_necessity/ablation_bundle.json --seed 0",
  "preregistration": null
 }

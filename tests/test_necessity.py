@@ -111,3 +111,16 @@ def test_necessity_enriches_not_causally_sufficient_card_end_to_end():
     cs = card.diagnostics["causal_summary"]
     assert cs["sufficiency"] == "not_sufficient" and cs["necessity"] == "necessary"
     assert "necessary but NOT sufficient" in cs["combined"]
+    # headline rolls necessity into the label, not buried under the sufficiency verdict
+    assert card.label == "not_causally_sufficient · necessary"
+
+
+def test_ablation_only_headline_surfaces_necessity():
+    """An ablation-only bundle (no decodability/steering) must NOT headline as a
+    bare 'insufficient_protocol' when necessity was actually established."""
+    from sieve_audit import run_audit
+
+    card = run_audit(_bundle(_abl(30, base=0.9, probe=0.2, rand=0.88))).card
+    assert card.status == "insufficient_protocol"   # machine-readable status unchanged
+    assert card.verdict is None
+    assert card.label == "necessary · sufficiency not established"

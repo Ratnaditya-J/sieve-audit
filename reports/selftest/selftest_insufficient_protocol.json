@@ -281,6 +281,7 @@
  },
  "verdict": null,
  "status": "insufficient_protocol",
+ "label": "insufficient_protocol",
  "allowed_claims": [
   "Under [model=synthetic/ground-truth-insufficient-protocol@v1, layer(s)=7, direction=rigged contrastive direction (synthetic), prompts=synthetic-families-v1, metrics=eval_behavior_score, single-layer additive steering], the signal is linearly decodable on held-out prompt families and beats surface (text-statistics) baselines.",
   "NO causal or monitor-validation claim is licensed: the causal stages of the protocol were not run (see decision reasons)."

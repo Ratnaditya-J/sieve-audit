@@ -30,7 +30,9 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     result = run_audit(bundle, cfg, bundle_path=str(args.bundle), prereg=prereg)
     stem = args.name or Path(args.bundle).stem
     json_path, md_path = write_card(result.card, args.out, stem)
-    verdict = result.card.verdict.value if result.card.verdict else result.card.status
+    verdict = result.card.label or (
+        result.card.verdict.value if result.card.verdict else result.card.status
+    )
     print(f"[sieve] verdict: {verdict}")
     print(f"[sieve] card: {md_path} (+ {json_path.name})")
     pre = result.card.preregistration
