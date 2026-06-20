@@ -27,6 +27,7 @@ from .config import CANONICAL_CONTROLS, AuditConfig
 from .controls import PROBE_ARM, ControlsResult, run_controls
 from .decodability import DecodabilityResult, run_decodability
 from .efficacy import EfficacyResult, run_efficacy_all_arms
+from .leakage import LeakageResult, run_leakage
 from .necessity import NecessityResult, run_necessity
 from .verdict import AuditCard, Decision, decide
 
@@ -38,6 +39,7 @@ class AuditResult:
     efficacy: dict[str, EfficacyResult] | None   # per steering arm
     controls: ControlsResult | None
     necessity: NecessityResult | None = None     # optional ablation gate (#2)
+    leakage: LeakageResult | None = None          # optional Tier-2 leakage gate
 
 
 def _cross_stage_gaps(
@@ -169,6 +171,12 @@ def run_audit(
             # necessity is additive; a failure must not block the sufficiency
             # verdict — it simply omits the necessity finding from the card.
             necessity = None
+    leakage = None
+    if bundle.leakage is not None:
+        try:
+            leakage = run_leakage(bundle.leakage, cfg)
+        except ValueError:
+            leakage = None  # additive; never blocks the sufficiency verdict
 
     hard_gaps.extend(_cross_stage_gaps(bundle, efficacy, controls, cfg))
 
@@ -198,7 +206,7 @@ def run_audit(
 
     card = build_card(
         bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check,
-        necessity,
+        necessity, leakage,
     )
     return AuditResult(
         card=card,
@@ -206,4 +214,5 @@ def run_audit(
         efficacy=efficacy,
         controls=controls,
         necessity=necessity,
+        leakage=leakage,
     )

@@ -57,6 +57,8 @@ _STRICTER_NUMERIC: dict[str, int] = {
     # larger eps flags more judge pairs as near-duplicates => stricter
     "judge_identical_eps": +1,
     "min_informative_judged": +1,
+    # a smaller drop-threshold flags leakage more readily => more conservative
+    "leakage_min_drop": -1,
 }
 _STRICTER_BOOL: dict[str, bool] = {
     "require_output_change": True,
@@ -119,6 +121,11 @@ class AuditConfig:
     judge_identical_eps: float = 0.02
     duplicate_judge_min_n: int = 200
     min_informative_judged: int = 30    # records outside the deadband needed for kappa
+
+    # --- leakage (Tier-2) ---
+    # leak-span removal must drop AUROC by at least this (CI lower bound), and by
+    # more than random-span removal, to flag the probe as leaky.
+    leakage_min_drop: float = 0.05
 
     def to_dict(self) -> dict:
         d = asdict(self)

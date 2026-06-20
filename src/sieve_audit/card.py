@@ -65,18 +65,19 @@ def _causal_summary(verdict, necessity) -> dict:
     return {"sufficiency": suff, "necessity": nec, "combined": combined}
 
 
-def _headline_label(verdict, status: str, necessity) -> str:
+def _headline_label(verdict, status: str, necessity, leakage=None) -> str:
     """Human-facing headline. Rolls the sufficiency-pipeline verdict together
-    with the necessity finding so a real necessity result is surfaced, not
-    buried under a bare 'insufficient_protocol'. Falls back to the formal
-    verdict/status when there is no conclusive necessity evidence."""
+    with the necessity finding (so a real necessity result is surfaced, not
+    buried under a bare 'insufficient_protocol') and flags leakage. Falls back to
+    the formal verdict/status when there is no conclusive necessity evidence."""
     base = verdict.value if verdict is not None else status
+    leak = " · leaky" if (leakage is not None and leakage.leaky) else ""
     if necessity is None or necessity.inconclusive:
-        return base
+        return base + leak
     nec = "necessary" if necessity.necessary else "not necessary"
     if verdict is None:
-        return f"{nec} · sufficiency not established"
-    return f"{base} · {nec}"
+        return f"{nec} · sufficiency not established{leak}"
+    return f"{base} · {nec}{leak}"
 
 
 def _canonical_hash(obj: object) -> str:
@@ -107,6 +108,7 @@ def build_card(
     bundle_path: str | None = None,
     prereg_check=None,
     necessity=None,
+    leakage=None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
     # Causal intervention(s) actually run; causal verdicts are bounded to these so
@@ -174,8 +176,10 @@ def build_card(
         diagnostics["controls"] = controls.to_dict()
     if necessity is not None:
         diagnostics["necessity"] = necessity.to_dict()
+    if leakage is not None:
+        diagnostics["leakage"] = leakage.to_dict()
     diagnostics["causal_summary"] = _causal_summary(decision.verdict, necessity)
-    headline = _headline_label(decision.verdict, decision.status, necessity)
+    headline = _headline_label(decision.verdict, decision.status, necessity, leakage)
 
     if decision.verdict is not None:
         allowed = [
@@ -227,6 +231,14 @@ def build_card(
         for arm, res in sorted(efficacy.items()):
             risks.extend(f"[{arm}] {n}" for n in res.notes)
     risks.extend(necessity_risks)
+    if leakage is not None and leakage.leaky:
+        risks.insert(
+            0,
+            "LEAKY: probe AUROC collapses when giveaway spans are removed (and "
+            "more than under random-span removal) — it reads textual evidence, "
+            "not internal state; expect false negatives where the behavior isn't "
+            "spelled out in the text.",
+        )
 
     return AuditCard(
         model=bundle.model,

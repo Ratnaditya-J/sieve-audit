@@ -103,6 +103,38 @@ class AblationRecord:
 
 
 @dataclass
+class LeakageEvidence:
+    """Probe scores under three input conditions, for the leakage (Boxo) check.
+
+    Same held-out examples/labels, re-scored after removing spans:
+    - ``probe_scores_full``: the unmodified input,
+    - ``probe_scores_leak_removed``: the giveaway spans removed (elicitation
+      prompt / the model's verbalized reasoning),
+    - ``probe_scores_random_removed``: an equal amount of *random* spans removed
+      — the matched control, so a drop can be attributed to removing the leaky
+      content, not to removing tokens in general (Boxo et al. 2509.21344).
+
+    Leaky ⟺ AUROC collapses under leak-removal but *not* under random-removal:
+    the probe was reading the giveaway text, not an internal state.
+    """
+
+    labels: list[int]
+    probe_scores_full: list[float]
+    probe_scores_leak_removed: list[float]
+    probe_scores_random_removed: list[float]
+
+    def __post_init__(self) -> None:
+        n = len(self.labels)
+        if not (len(self.probe_scores_full) == len(self.probe_scores_leak_removed)
+                == len(self.probe_scores_random_removed) == n):
+            raise ValueError("leakage evidence fields must have equal length")
+        if n == 0:
+            raise ValueError("leakage evidence is empty")
+        if set(self.labels) - {0, 1}:
+            raise ValueError("labels must be 0/1")
+
+
+@dataclass
 class EvidenceBundle:
     """Everything a SIEVE audit needs, recorded by an adapter."""
 
@@ -123,6 +155,9 @@ class EvidenceBundle:
     # optional necessity evidence (#2): empty by default, so a bundle without
     # ablation audits exactly as before — the necessity gate is purely additive.
     ablation: list[AblationRecord] = field(default_factory=list)
+    # optional leakage evidence (Tier-2): probe scores under full / leak-removed
+    # / random-removed inputs; absent by default, so the gate is purely additive.
+    leakage: "LeakageEvidence | None" = None
 
     bundle_version: str = "0.1"
 
@@ -157,6 +192,7 @@ class EvidenceBundle:
     @classmethod
     def from_dict(cls, d: dict) -> "EvidenceBundle":
         dec = d.get("decodability")
+        lk = d.get("leakage")
         return cls(
             model=d["model"],
             revision=d.get("revision"),
@@ -170,6 +206,7 @@ class EvidenceBundle:
             efficacy=[EfficacyRecord(**r) for r in d.get("efficacy", [])],
             steering=[SteeringRecord(**r) for r in d.get("steering", [])],
             ablation=[AblationRecord(**r) for r in d.get("ablation", [])],
+            leakage=LeakageEvidence(**lk) if lk else None,
             bundle_version=d.get("bundle_version", "0.1"),
         )
 
