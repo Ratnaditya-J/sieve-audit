@@ -43,8 +43,12 @@ import numpy as np
 from ..bundle import (
     AblationRecord,
     DecodabilityEvidence,
+    DeploymentEvidence,
     EfficacyRecord,
     EvidenceBundle,
+    LeakageEvidence,
+    MultiLayerRecord,
+    PatchingRecord,
     SteeringRecord,
 )
 
@@ -242,6 +246,81 @@ def _generate(model, tokenizer, text: str, hook: SteeringHook | None,
         if hook is not None:
             hook.remove()
     return tokenizer.decode(out[0, ids.shape[1]:], skip_special_tokens=True)
+
+
+def _generate_with_hooks(model, tokenizer, text: str, registrations,
+                         max_new_tokens: int) -> str:
+    """Generate with an arbitrary set of (hook, layer) registrations active —
+    used for joint multi-layer ablation and activation patching, where more than
+    one site is intervened on at once. `registrations` is a list of (hook, layer);
+    an empty list is a clean baseline generation."""
+    import torch
+
+    ids = _encode(tokenizer, text, _input_device(model))
+    for hook, layer in registrations:
+        hook.register(model, layer)
+    try:
+        with torch.no_grad():
+            out = model.generate(
+                ids,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=tokenizer.eos_token_id or tokenizer.pad_token_id,
+            )
+    finally:
+        for hook, _ in registrations:
+            hook.remove()
+    return tokenizer.decode(out[0, ids.shape[1]:], skip_special_tokens=True)
+
+
+class PatchHook:
+    """Activation patching at one site, last prompt-token position only (the
+    decision point the probe's last-token readout conditions on).
+
+    Transplants the residual the model computed at the CLEAN prompt's decision
+    point into the CORRUPT run, so the full-site patch is a ground-truth measure
+    of how much the site's causal content matters. Modes:
+
+      full       h[-1] := clean_resid                 (oracle: whole site)
+      direction  h[-1] += (clean·w - h[-1]·w) w        (only the audited coordinate)
+      random     h[-1] += (clean·r - h[-1]·r) r        (matched control coordinate)
+
+    Prefill only (seq_len > 1); decode steps are no-ops (the patched KV carries
+    the effect), mirroring SteeringHook."""
+
+    def __init__(self, mode: str, clean_resid, direction=None):
+        self.mode = mode
+        self.clean_resid = clean_resid       # torch (d_model,)
+        self.direction = direction           # torch (d_model,), unit norm (dir/random)
+        self.handle = None
+        self.applied_norm: float | None = None   # ||h'[-1] - h[-1]|| (liveness)
+
+    def __call__(self, module, args, output):
+        hidden = output[0] if isinstance(output, tuple) else output
+        if hidden.dim() != 3 or hidden.shape[1] <= 1:   # decode step
+            return output
+        h = hidden[0, -1]
+        clean = self.clean_resid.to(h.dtype).to(h.device)
+        if self.mode == "full":
+            new = clean.clone()
+        else:
+            w = self.direction.to(h.dtype).to(h.device)
+            delta = (clean @ w) - (h @ w)
+            new = h + delta * w
+        self.applied_norm = float((new - h).norm())
+        modified = hidden.clone()
+        modified[0, -1] = new
+        if isinstance(output, tuple):
+            return (modified,) + output[1:]
+        return modified
+
+    def register(self, model, layer_idx: int):
+        self.handle = _get_layer_module(model, layer_idx).register_forward_hook(self)
+
+    def remove(self):
+        if self.handle is not None:
+            self.handle.remove()
+            self.handle = None
 
 
 def _hidden_at_layer(model, tokenizer, text: str, layer: int, pool: str = "last"):
@@ -741,8 +820,11 @@ def cmd_judge(args) -> int:
             except Exception as exc:  # noqa: BLE001
                 print(f"  judge {spec} failed on {r['arm']}@{r['alpha']}/{r['prompt_id']}: {exc}")
                 scores[spec] = float("nan")
-        return {"arm": r["arm"], "alpha": r["alpha"], "prompt_id": r["prompt_id"],
-                "judge_scores": scores}
+        row = {"arm": r["arm"], "alpha": r["alpha"], "prompt_id": r["prompt_id"],
+               "judge_scores": scores}
+        if "layers" in r:   # carry the joint site through for multilayer/patching
+            row["layers"] = r["layers"]
+        return row
 
     # Judging is API-bound and order-independent, so fan out across threads
     # (the GPU is idle here). Results are reordered to input order before write.
@@ -825,19 +907,58 @@ def cmd_bundle(args) -> int:
             "judge silently shrinks the evidence; check judge output before trusting the audit"
         )
 
+    def _clean_scores(r: dict) -> dict:
+        return {k: v for k, v in r["judge_scores"].items()
+                if isinstance(v, (int, float)) and math.isfinite(v)}
+
+    def _read_judged(path) -> list[dict]:
+        return [json.loads(l) for l in Path(path).read_text().splitlines() if l.strip()]
+
     ablation = []
     if getattr(args, "judged_ablation", None):
-        abl_rows = [json.loads(l) for l in Path(args.judged_ablation).read_text().splitlines() if l.strip()]
         ablation = [
-            AblationRecord(
-                arm=r["arm"],
-                prompt_id=r["prompt_id"],
-                judge_scores={k: v for k, v in r["judge_scores"].items()
-                              if isinstance(v, (int, float)) and math.isfinite(v)},
-            )
-            for r in abl_rows
+            AblationRecord(arm=r["arm"], prompt_id=r["prompt_id"],
+                           judge_scores=_clean_scores(r))
+            for r in _read_judged(args.judged_ablation)
         ]
         ablation = [r for r in ablation if len(r.judge_scores) >= 2]
+
+    multilayer = []
+    if getattr(args, "judged_multilayer", None):
+        multilayer = [
+            MultiLayerRecord(arm=r["arm"], prompt_id=r["prompt_id"],
+                             layers=list(r["layers"]), judge_scores=_clean_scores(r))
+            for r in _read_judged(args.judged_multilayer)
+        ]
+        multilayer = [r for r in multilayer if len(r.judge_scores) >= 2]
+
+    patching = []
+    if getattr(args, "judged_patching", None):
+        patching = [
+            PatchingRecord(arm=r["arm"], prompt_id=r["prompt_id"],
+                           layers=list(r["layers"]), judge_scores=_clean_scores(r))
+            for r in _read_judged(args.judged_patching)
+        ]
+        patching = [r for r in patching if len(r.judge_scores) >= 2]
+
+    leakage = None
+    if getattr(args, "leakage", None):
+        lk = json.loads(Path(args.leakage).read_text())
+        leakage = LeakageEvidence(
+            labels=[r["label"] for r in lk],
+            probe_scores_full=[r["score_full"] for r in lk],
+            probe_scores_leak_removed=[r["score_leak_removed"] for r in lk],
+            probe_scores_random_removed=[r["score_random_removed"] for r in lk],
+        )
+
+    deployment = None
+    if getattr(args, "decode_ood", None):
+        ood = json.loads(Path(args.decode_ood).read_text())
+        deployment = DeploymentEvidence(
+            distribution=args.ood_distribution or "off_distribution",
+            labels=[r["label"] for r in ood],
+            probe_scores=[r["probe_score"] for r in ood],
+        )
 
     bundle = EvidenceBundle(
         model=args.model,
@@ -852,11 +973,18 @@ def cmd_bundle(args) -> int:
         efficacy=efficacy,
         steering=steering,
         ablation=ablation,
+        multilayer=multilayer,
+        patching=patching,
+        leakage=leakage,
+        deployment=deployment,
     )
     bundle.validate()
     bundle.save(args.out)
     print(f"[bundle] decodability n={len(decode_records)}, efficacy={len(efficacy)}, "
-          f"steering={len(steering)}, ablation={len(ablation)}")
+          f"steering={len(steering)}, ablation={len(ablation)}, "
+          f"multilayer={len(multilayer)}, patching={len(patching)}, "
+          f"leakage={'yes' if leakage else 'no'}, "
+          f"deployment={'yes' if deployment else 'no'}")
     print(f"[bundle] -> {args.out}   (next: sieve audit --bundle {args.out})")
     return 0
 
@@ -975,6 +1103,178 @@ def cmd_bundle_ablation(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# subcommand: multilayer (joint multi-layer ablation -> distributed mechanism)
+# ---------------------------------------------------------------------------
+
+
+def cmd_multilayer(args) -> int:
+    """Joint ablation across SEVERAL layers at once (the committee test). Same
+    arms as `ablate` but every hook is registered simultaneously, so a
+    distributed mechanism a single-layer ablation misses still shows up."""
+    import torch
+
+    model, tokenizer = _load_model(args)
+    sv = np.load(args.vectors)
+    dirs = {
+        "probe": sv["probe"] / (np.linalg.norm(sv["probe"]) + 1e-12),
+        "ablate_random": sv["random"] / (np.linalg.norm(sv["random"]) + 1e-12),
+    }
+    prompts = _load_labeled_prompts(args.eval_prompts)
+    layers = sorted(set(args.layers))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    arms = ["baseline", "probe", "ablate_random"]
+    n_total = len(prompts) * len(arms)
+    print(f"[multilayer] joint layers {layers}: {len(prompts)} prompts x "
+          f"{len(arms)} arms = {n_total} generations")
+    done = 0
+    with out.open("w") as fout:
+        for arm in arms:
+            for p in prompts:
+                pid = p.get("prompt_id", p.get("id", "p?"))
+                regs = []
+                if arm != "baseline":
+                    w = torch.from_numpy(dirs[arm]).to(_input_device(model))
+                    regs = [(AblationHook(w), L) for L in layers]
+                text = _generate_with_hooks(model, tokenizer, p["text"], regs,
+                                            args.max_new_tokens)
+                fout.write(json.dumps({
+                    "arm": arm, "alpha": 0.0, "prompt_id": pid,
+                    "layers": layers, "generated_text": text,
+                    "removed_norm": (float(np.mean([h.removed_norm or 0.0
+                                                    for h, _ in regs])) if regs else 0.0),
+                }) + "\n")
+                fout.flush()
+                done += 1
+                if done % 20 == 0:
+                    print(f"  {done}/{n_total}")
+    print(f"[multilayer] -> {out}   (next: judge, then bundle --judged-multilayer)")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# subcommand: patching (oracle / activation-patching calibration)
+# ---------------------------------------------------------------------------
+
+
+def cmd_patching(args) -> int:
+    """Activation-patching evidence for the oracle gate. Eval prompts are PAIRS
+    {prompt_id, clean_text, corrupt_text}: clean elicits the behavior, corrupt
+    suppresses it. We cache the clean decision-point residual at the site and
+    patch it (full / direction / random) into the corrupt run."""
+    import torch
+
+    model, tokenizer = _load_model(args)
+    sv = np.load(args.vectors)
+    probe = sv["probe"] / (np.linalg.norm(sv["probe"]) + 1e-12)
+    rand = sv["random"] / (np.linalg.norm(sv["random"]) + 1e-12)
+    w_t = torch.from_numpy(probe).to(_input_device(model))
+    r_t = torch.from_numpy(rand).to(_input_device(model))
+    prompts = _load_labeled_prompts(args.eval_prompts)
+    if any("clean_text" not in p or "corrupt_text" not in p for p in prompts):
+        raise SystemExit("patching prompts need 'clean_text' and 'corrupt_text'")
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    arms = ["clean", "corrupt", "patch_full", "patch_direction", "patch_random"]
+    n_total = len(prompts) * len(arms)
+    print(f"[patching] site layer {args.layer}: {len(prompts)} pairs x "
+          f"{len(arms)} arms = {n_total} generations")
+    done = 0
+    with out.open("w") as fout:
+        for p in prompts:
+            pid = p.get("prompt_id", "p?")
+            # oracle source: the clean decision-point residual at the site
+            clean_resid = torch.from_numpy(
+                _hidden_at_layer(model, tokenizer, p["clean_text"], args.layer,
+                                 pool="last")
+            ).to(_input_device(model))
+            for arm in arms:
+                if arm == "clean":
+                    text = _generate(model, tokenizer, p["clean_text"], None,
+                                     args.layer, args.max_new_tokens)
+                    applied = None
+                elif arm == "corrupt":
+                    text = _generate(model, tokenizer, p["corrupt_text"], None,
+                                     args.layer, args.max_new_tokens)
+                    applied = None
+                else:
+                    mode = {"patch_full": "full", "patch_direction": "direction",
+                            "patch_random": "random"}[arm]
+                    direction = w_t if arm == "patch_direction" else (
+                        r_t if arm == "patch_random" else None)
+                    hook = PatchHook(mode, clean_resid, direction)
+                    text = _generate_with_hooks(
+                        model, tokenizer, p["corrupt_text"],
+                        [(hook, args.layer)], args.max_new_tokens)
+                    applied = hook.applied_norm
+                fout.write(json.dumps({
+                    "arm": arm, "alpha": 0.0, "prompt_id": pid,
+                    "layers": [args.layer], "generated_text": text,
+                    "applied_norm": applied,
+                }) + "\n")
+                fout.flush()
+                done += 1
+                if done % 20 == 0:
+                    print(f"  {done}/{n_total}")
+    print(f"[patching] -> {out}   (next: judge, then bundle --judged-patching)")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# subcommand: leakage (Tier-2 span-removal probe re-scoring)
+# ---------------------------------------------------------------------------
+
+
+def _remove_random_span(text: str, length: int, rng) -> str:
+    """Remove a contiguous char span of `length` from a random offset — the
+    matched control for leak-span removal (removing tokens in general)."""
+    if length <= 0 or length >= len(text):
+        return text
+    start = int(rng.integers(0, len(text) - length))
+    return text[:start] + text[start + length:]
+
+
+def cmd_leakage(args) -> int:
+    """Re-score holdout prompts three ways for the Tier-2 leakage gate: full,
+    leak-span removed, and a matched random-span removed. Prompts carry an
+    optional 'leak_span' (the giveaway substring); rows without one are scored
+    unchanged for all three (they contribute no removal signal)."""
+    model, tokenizer = _load_model(args)
+    sv = np.load(args.vectors)
+    w = sv["probe"]
+    prompts = _load_labeled_prompts(args.holdout_prompts)
+    if any("label" not in p for p in prompts):
+        raise SystemExit("leakage prompts need a 'label' field")
+    rng = np.random.default_rng(args.seed)
+
+    def score(text: str) -> float:
+        return float(_hidden_at_layer(model, tokenizer, text, args.layer,
+                                      pool=args.pool) @ w)
+
+    print(f"[leakage] re-scoring {len(prompts)} holdout prompts (full / "
+          f"leak-removed / random-removed) at layer {args.layer}")
+    records = []
+    for i, p in enumerate(prompts):
+        text = p["text"]
+        leak = p.get("leak_span", "")
+        leak_removed = text.replace(leak, "") if leak else text
+        rand_removed = _remove_random_span(text, len(leak), rng) if leak else text
+        records.append({
+            "prompt_id": p.get("prompt_id", f"h{i}"),
+            "label": int(p["label"]),
+            "score_full": score(text),
+            "score_leak_removed": score(leak_removed),
+            "score_random_removed": score(rand_removed),
+        })
+        if (i + 1) % 25 == 0:
+            print(f"  {i + 1}/{len(prompts)}")
+    Path(args.out).write_text(json.dumps(records, indent=1))
+    print(f"[leakage] -> {args.out}   (next: bundle --leakage {args.out})")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -1071,6 +1371,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--judged-ablation", type=Path, default=None,
                    help="optional judged ablation generations to fold in (necessity), "
                         "so one bundle yields a complete decode+steer+ablate verdict")
+    p.add_argument("--judged-multilayer", type=Path, default=None,
+                   help="optional judged joint multi-layer ablation generations")
+    p.add_argument("--judged-patching", type=Path, default=None,
+                   help="optional judged activation-patching generations (oracle)")
+    p.add_argument("--leakage", type=Path, default=None,
+                   help="optional Tier-2 leakage re-scoring JSON (from `leakage`)")
+    p.add_argument("--decode-ood", type=Path, default=None,
+                   help="optional off-distribution decode JSON for the deployment lens")
+    p.add_argument("--ood-distribution", default=None,
+                   help="name of the off-distribution eval set")
     p.add_argument("--model", required=True)
     p.add_argument("--revision", default=None)
     p.add_argument("--layer", type=int, required=True)
@@ -1109,6 +1419,41 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--metric", default="refusal")
     p.add_argument("--out", required=True)
     p.set_defaults(func=cmd_bundle_ablation)
+
+    p = sub.add_parser("multilayer",
+                       help="joint multi-layer ablation generations (committee test)")
+    add_model_args(p)
+    p.add_argument("--vectors", type=Path, required=True,
+                   help=".npz with 'probe' and 'random' directions")
+    p.add_argument("--layers", type=int, nargs="+", required=True,
+                   help="the joint layer set to ablate simultaneously (>= 2)")
+    p.add_argument("--eval-prompts", type=Path, required=True,
+                   help="JSONL: {prompt_id, text} prompts that elicit the behavior")
+    p.add_argument("--max-new-tokens", type=int, default=200)
+    p.add_argument("--out", default="multilayer_generations.jsonl")
+    p.set_defaults(func=cmd_multilayer)
+
+    p = sub.add_parser("patching",
+                       help="activation-patching generations (oracle calibration)")
+    add_model_args(p)
+    p.add_argument("--vectors", type=Path, required=True,
+                   help=".npz with 'probe' and 'random' directions")
+    p.add_argument("--eval-prompts", type=Path, required=True,
+                   help="JSONL: {prompt_id, clean_text, corrupt_text} contrast pairs")
+    p.add_argument("--max-new-tokens", type=int, default=200)
+    p.add_argument("--out", default="patching_generations.jsonl")
+    p.set_defaults(func=cmd_patching)
+
+    p = sub.add_parser("leakage",
+                       help="Tier-2 leakage re-scoring (full / leak / random removed)")
+    add_model_args(p)
+    p.add_argument("--vectors", type=Path, required=True)
+    p.add_argument("--holdout-prompts", type=Path, required=True,
+                   help="JSONL: {prompt_id, text, label, leak_span?}")
+    p.add_argument("--pool", choices=["last", "mean"], default="last")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_leakage)
 
     args = parser.parse_args(argv)
     return args.func(args)
