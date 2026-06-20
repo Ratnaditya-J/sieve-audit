@@ -272,6 +272,11 @@
     "control 'orthogonal' missing at alpha=20",
     "control 'wrong_layer' missing at alpha=20"
    ]
+  },
+  "causal_summary": {
+   "sufficiency": "untested",
+   "necessity": "untested",
+   "combined": "single-method evidence only (sufficiency=untested, necessity=untested); cross-method agreement not established"
   }
  },
  "verdict": null,
@@ -298,7 +303,7 @@
  ],
  "protocol_version": "0.1",
  "config_hash": "7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd",
- "bundle_hash": "637cc31eea32436aa9798211aa43ef22e2477b6be94f69cba9f97c0a7ee62679",
+ "bundle_hash": "cd449f3036b0018fdbb7b7501c13c0baf1295edbf6090ce69f74e8e3700ed2e0",
  "rerun_command": null,
  "preregistration": null
 }

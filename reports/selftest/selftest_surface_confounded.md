@@ -1,6 +1,6 @@
 # SIEVE audit card — `surface_confounded`
 
-> **Verdict: surface_confounded** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`)
+> **Verdict: surface_confounded** — under single-layer additive steering (protocol v0.1, config `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`, bundle `7db46b987e866e7f9fc834be9614803857634c4a0fd3e3506c604693d9324609`)
 >
 > **Tested intervention(s):** single-layer additive steering  ·  causal verdicts are bounded to these; necessity (ablation) and distributed/multi-layer mechanisms were not tested
 >
@@ -34,6 +34,7 @@
 - |probe| − |random| @α=20.0: -0.003 [-0.014, 0.009]
 - |probe| − |orthogonal| @α=20.0: -0.005 [-0.019, 0.008]
 - |probe| − |wrong_layer| @α=20.0: -0.007 [-0.020, 0.007]
+- **Causal summary:** sufficiency=untested, necessity=untested → single-method evidence only (sufficiency=untested, necessity=untested); cross-method agreement not established
 
 ### Decision reasons
 
@@ -64,5 +65,5 @@
 
 ## Reproducibility
 
-- Protocol: v0.1; config hash `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`; bundle hash `a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a`
+- Protocol: v0.1; config hash `7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd`; bundle hash `7db46b987e866e7f9fc834be9614803857634c4a0fd3e3506c604693d9324609`
 - Re-run: `n/a`

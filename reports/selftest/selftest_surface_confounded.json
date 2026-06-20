@@ -343,6 +343,11 @@
    "causally_sufficient": false,
    "protocol_violations": [],
    "notes": []
+  },
+  "causal_summary": {
+   "sufficiency": "untested",
+   "necessity": "untested",
+   "combined": "single-method evidence only (sufficiency=untested, necessity=untested); cross-method agreement not established"
   }
  },
  "verdict": "surface_confounded",
@@ -364,7 +369,7 @@
  ],
  "protocol_version": "0.1",
  "config_hash": "7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd",
- "bundle_hash": "a789222e1d97a7e927bd43cf2a73078b686353b5a0cd97e056f5dcf6e134077a",
+ "bundle_hash": "7db46b987e866e7f9fc834be9614803857634c4a0fd3e3506c604693d9324609",
  "rerun_command": null,
  "preregistration": null
 }

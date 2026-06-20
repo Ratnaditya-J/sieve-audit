@@ -23,7 +23,46 @@ from .verdict import (
     RESIDUAL_RISKS_COMMON,
     AuditCard,
     Decision,
+    Verdict,
 )
+
+
+def _causal_summary(verdict, necessity) -> dict:
+    """Cross-method agreement (#4): integrate sufficiency (steering) and
+    necessity (ablation) into one read, flagging — never hiding — disagreement
+    or single-method coverage. No single method's result stands in for the
+    whole causal picture."""
+    if verdict == Verdict.CAUSALLY_SUFFICIENT:
+        suff = "sufficient"
+    elif verdict == Verdict.NOT_CAUSALLY_SUFFICIENT:
+        suff = "not_sufficient"
+    else:  # intervention_ineffective / not_decodable / surface_confounded / None
+        suff = "untested"
+    if necessity is None:
+        nec = "untested"
+    elif necessity.inconclusive:
+        nec = "inconclusive"
+    elif necessity.necessary:
+        nec = "necessary"
+    else:
+        nec = "not_necessary"
+
+    if suff == "sufficient" and nec == "necessary":
+        combined = ("sufficient AND necessary — strong causal evidence under the "
+                    "tested interventions")
+    elif suff == "not_sufficient" and nec == "necessary":
+        combined = ("necessary but NOT sufficient — distributed/partial-mechanism "
+                    "signature; the signal is causally involved, not inert")
+    elif suff == "sufficient" and nec == "not_necessary":
+        combined = ("sufficient but NOT necessary — likely one of several redundant "
+                    "pathways")
+    elif suff == "not_sufficient" and nec == "not_necessary":
+        combined = ("neither sufficient nor necessary under the tested interventions "
+                    "— limited causal role")
+    else:
+        combined = (f"single-method evidence only (sufficiency={suff}, "
+                    f"necessity={nec}); cross-method agreement not established")
+    return {"sufficiency": suff, "necessity": nec, "combined": combined}
 
 
 def _canonical_hash(obj: object) -> str:
@@ -121,6 +160,7 @@ def build_card(
         diagnostics["controls"] = controls.to_dict()
     if necessity is not None:
         diagnostics["necessity"] = necessity.to_dict()
+    diagnostics["causal_summary"] = _causal_summary(decision.verdict, necessity)
 
     if decision.verdict is not None:
         allowed = [
@@ -337,6 +377,12 @@ def card_to_markdown(card: AuditCard) -> str:
                 f"(probe-ablation drop {_fmt_ci(nec['probe_drop'])}; "
                 f"vs ablate_random {_fmt_ci(nec['probe_vs_random_drop'])})"
             )
+    cs = card.diagnostics.get("causal_summary")
+    if cs:
+        lines.append(
+            f"- **Causal summary:** sufficiency={cs['sufficiency']}, "
+            f"necessity={cs['necessity']} → {cs['combined']}"
+        )
     lines += ["", "### Decision reasons", ""]
     lines += [f"- {r}" for r in card.diagnostics.get("decision_reasons", [])]
 

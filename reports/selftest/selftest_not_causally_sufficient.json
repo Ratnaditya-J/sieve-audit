@@ -346,6 +346,11 @@
    "causally_sufficient": false,
    "protocol_violations": [],
    "notes": []
+  },
+  "causal_summary": {
+   "sufficiency": "not_sufficient",
+   "necessity": "untested",
+   "combined": "single-method evidence only (sufficiency=not_sufficient, necessity=untested); cross-method agreement not established"
   }
  },
  "verdict": "not_causally_sufficient",
@@ -369,7 +374,7 @@
  ],
  "protocol_version": "0.1",
  "config_hash": "7dfbb246a926c29de537f0d07c5d2bc3d39506607b62de75e35394ce933c04cd",
- "bundle_hash": "a0aa98bc2f79d7c0180d6337902061f73ea4ff7023c45dbcdcea499db1da7cb1",
+ "bundle_hash": "66b9ed990e24c9bf0cb04a328bc4996fb28adc5f0df32b827e89328f6c5609f4",
  "rerun_command": null,
  "preregistration": null
 }

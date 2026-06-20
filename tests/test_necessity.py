@@ -107,3 +107,7 @@ def test_necessity_enriches_not_causally_sufficient_card_end_to_end():
     assert result.necessity is not None and result.necessity.necessary
     assert card.diagnostics["necessity"]["necessary"] is True
     assert any("IS necessary" in c for c in card.allowed_claims)
+    # #4 cross-method summary: not-sufficient + necessary -> distributed signature
+    cs = card.diagnostics["causal_summary"]
+    assert cs["sufficiency"] == "not_sufficient" and cs["necessity"] == "necessary"
+    assert "necessary but NOT sufficient" in cs["combined"]
