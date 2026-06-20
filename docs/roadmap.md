@@ -46,6 +46,27 @@ distribution … plus off-distribution degradation," with the caveat that real
 deployment rates depend on the user's threshold and data. A missing axis →
 "**not assessed**," loudly — especially the false-negative (safety) number.
 
+**Plain-language first.** Lead each error with a sentence a non-researcher
+understands, then the takeaway, with the metrics demoted to an optional aside:
+
+> Will it MISS real problems? Catches most cases on data like its test set,
+> clearly worse on different data, barely works when the behavior isn't visible
+> in the text. **→ High miss-risk in the wild.** *(detail: recall 78%→55%→~chance @1% FPR)*
+
+**Show the dial, don't just state a point.** FP/FN are a threshold the deployer
+sets, so the report should include the **ROC curve(s)** and let them pick: read
+off "at the false-alarm rate I can tolerate, here's how much I catch." Plot three
+lines — **in-distribution, off-distribution, and leakage-removed** — so the
+*spread between them* visually shows how much worse it gets in the wild; mark the
+plain-language example as an anchor point on the curve.
+
+**Output format.** Keep Markdown + JSON canonical (diffable, hashable,
+reproducible — "cite the hash, re-run, same card"). Embed the ROC chart as a
+PNG/SVG in the card (renders on GitHub). Offer **PDF as an export** (a sharing
+wrapper for non-technical stakeholders), *not* the source of truth. The chart —
+not the format — is the value. (ROC data comes from the decodability stage, so a
+real chart needs a decode-bearing bundle, not an ablation-only one.)
+
 ## 3. Multi-layer / distributed interventions
 Single-layer steering and ablation under-see **distributed** mechanisms (a
 direction re-derived across many layers only partly bites at one). Add
