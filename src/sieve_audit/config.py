@@ -59,6 +59,8 @@ _STRICTER_NUMERIC: dict[str, int] = {
     "min_informative_judged": +1,
     # a smaller drop-threshold flags leakage more readily => more conservative
     "leakage_min_drop": -1,
+    # a larger required recovered-fraction is a higher bar for "direction-faithful"
+    "oracle_min_recovered": +1,
 }
 _STRICTER_BOOL: dict[str, bool] = {
     "require_output_change": True,
@@ -127,6 +129,11 @@ class AuditConfig:
     # leak-span removal must drop AUROC by at least this (CI lower bound), and by
     # more than random-span removal, to flag the probe as leaky.
     leakage_min_drop: float = 0.05
+
+    # --- oracle (activation-patching) calibration ---
+    # direction-patch must recover at least this fraction of the full-site (oracle)
+    # effect — and beat a random-patch control — to call the direction faithful.
+    oracle_min_recovered: float = 0.5
 
     # --- deployment lens (reporting only; voids no verdict) ---
     # false-alarm (FPR) budgets at which to report recall for practitioners.

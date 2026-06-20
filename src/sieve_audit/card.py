@@ -37,11 +37,21 @@ def _ml_state(multilayer) -> str:
     return "necessary_joint" if multilayer.necessary else "not_necessary_joint"
 
 
-def _causal_summary(verdict, necessity, multilayer=None) -> dict:
+def _oracle_state(oracle) -> str:
+    """'untested' | 'inconclusive' | 'faithful' | 'unfaithful'."""
+    if oracle is None:
+        return "untested"
+    if oracle.inconclusive:
+        return "inconclusive"
+    return "faithful" if oracle.faithful else "unfaithful"
+
+
+def _causal_summary(verdict, necessity, multilayer=None, oracle=None) -> dict:
     """Cross-method agreement (#4): integrate sufficiency (steering), necessity
-    (single-layer ablation), and the joint multi-layer test into one read,
-    flagging — never hiding — disagreement or single-method coverage. No single
-    method's result stands in for the whole causal picture."""
+    (single-layer ablation), the joint multi-layer test, and oracle (patching)
+    calibration into one read, flagging — never hiding — disagreement or
+    single-method coverage. No single method's result stands in for the whole
+    causal picture."""
     if verdict == Verdict.CAUSALLY_SUFFICIENT:
         suff = "sufficient"
     elif verdict == Verdict.NOT_CAUSALLY_SUFFICIENT:
@@ -86,7 +96,22 @@ def _causal_summary(verdict, necessity, multilayer=None) -> dict:
     else:
         combined = (f"single-method evidence only (sufficiency={suff}, "
                     f"necessity={nec}); cross-method agreement not established")
-    return {"sufficiency": suff, "necessity": nec, "multilayer": ml, "combined": combined}
+    orc = _oracle_state(oracle)
+    if orc == "unfaithful":
+        combined += (
+            " — but oracle (patching) calibration shows the site is causal while "
+            "the audited DIRECTION is not its faithful coordinate (low recovered "
+            "fraction): treat the probe as a correlate, not the mechanism"
+        )
+    elif orc == "faithful":
+        combined += (
+            " — oracle (patching) calibration confirms the audited direction is a "
+            "faithful coordinate of the site's mechanism"
+        )
+    return {
+        "sufficiency": suff, "necessity": nec, "multilayer": ml,
+        "oracle": orc, "combined": combined,
+    }
 
 
 def _necessity_phrase(necessity, multilayer) -> str | None:
@@ -153,6 +178,7 @@ def build_card(
     leakage=None,
     multilayer=None,
     deployment=None,
+    oracle=None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
     # Causal intervention(s) actually run; causal verdicts are bounded to these so
@@ -235,6 +261,38 @@ def build_card(
             "out by this null. Supply multi-layer ablation evidence to close this gap."
         )
 
+    # --- oracle (activation-patching) calibration ---
+    oracle_claims: list[str] = []
+    oracle_risks: list[str] = []
+    if oracle is not None:
+        if oracle.inconclusive:
+            oracle_risks.append(
+                "Oracle (patching) calibration evidence was provided but could not "
+                "be adjudicated: " + "; ".join(oracle.notes)
+            )
+        else:
+            tested_interventions = tested_interventions + [
+                f"activation patching (layers {oracle.layers})"
+            ]
+            rec = oracle.recovered_fraction
+            if oracle.faithful:
+                oracle_claims.append(
+                    f"Oracle calibration: patching the audited direction recovers "
+                    f"{rec.point:.0%} (95% CI {rec.lo:.0%}–{rec.hi:.0%}) of the "
+                    f"full-site causal effect and beats a random-patch control — the "
+                    "direction is a FAITHFUL coordinate of the site's mechanism, not "
+                    "merely a correlate."
+                )
+            else:
+                oracle_risks.append(
+                    f"DIRECTION UNFAITHFUL (oracle/patching): the site is causal but "
+                    f"patching the audited direction recovers only {rec.point:.0%} "
+                    f"(95% CI {rec.lo:.0%}–{rec.hi:.0%}) of the full-site effect "
+                    "(or does not beat the random-patch control). The probe reads a "
+                    "correlate of the mechanism, not the coordinate the mechanism "
+                    "runs through — necessity/sufficiency can still mislead a monitor."
+                )
+
     interventions_str = ", ".join(tested_interventions) or "none (causal stage not run)"
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
     bundle_hash = _canonical_hash(bundle.to_dict())
@@ -272,10 +330,12 @@ def build_card(
         diagnostics["multilayer"] = multilayer.to_dict()
     if leakage is not None:
         diagnostics["leakage"] = leakage.to_dict()
+    if oracle is not None:
+        diagnostics["oracle"] = oracle.to_dict()
     if deployment is not None:
         diagnostics["deployment"] = deployment.to_dict()
     diagnostics["causal_summary"] = _causal_summary(
-        decision.verdict, necessity, multilayer
+        decision.verdict, necessity, multilayer, oracle
     )
     headline = _headline_label(
         decision.verdict, decision.status, necessity, leakage, multilayer
@@ -312,7 +372,7 @@ def build_card(
             ]
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
-    allowed = allowed + necessity_claims + multilayer_claims
+    allowed = allowed + necessity_claims + multilayer_claims + oracle_claims
 
     risks = list(RESIDUAL_RISKS_COMMON)
     if risks_prereg:
@@ -332,6 +392,7 @@ def build_card(
             risks.extend(f"[{arm}] {n}" for n in res.notes)
     risks.extend(necessity_risks)
     risks.extend(multilayer_risks)
+    risks.extend(oracle_risks)
     if deployment is not None:
         risks.extend(f"[deployment] {n}" for n in deployment.notes)
     if leakage is not None and leakage.leaky:
@@ -526,12 +587,34 @@ def card_to_markdown(card: AuditCard) -> str:
                 f"(joint-ablation drop {_fmt_ci(mn['probe_drop'])}; "
                 f"vs ablate_random {_fmt_ci(mn['probe_vs_random_drop'])})"
             )
+    orc = card.diagnostics.get("oracle")
+    if orc:
+        if orc["inconclusive"]:
+            lines.append(
+                f"- Oracle (patching, layers {orc['layers']}): inconclusive — "
+                + "; ".join(orc["notes"])
+            )
+        else:
+            rec = orc["recovered_fraction"]
+            comp = orc.get("patch_completeness")
+            comp_str = (
+                f"; full-site patch completeness {comp['point']:.0%}"
+                if comp else ""
+            )
+            lines.append(
+                f"- Oracle (patching, layers {orc['layers']}): "
+                f"{'FAITHFUL' if orc['faithful'] else 'UNFAITHFUL'} — direction "
+                f"recovers {_fmt_ci(rec)} of the full-site effect; "
+                f"direction vs random-patch {_fmt_ci(orc['direction_vs_random'])}"
+                f"{comp_str}"
+            )
     cs = card.diagnostics.get("causal_summary")
     if cs:
         ml_part = f", multilayer={cs['multilayer']}" if cs.get("multilayer") else ""
+        orc_part = f", oracle={cs['oracle']}" if cs.get("oracle") else ""
         lines.append(
             f"- **Causal summary:** sufficiency={cs['sufficiency']}, "
-            f"necessity={cs['necessity']}{ml_part} → {cs['combined']}"
+            f"necessity={cs['necessity']}{ml_part}{orc_part} → {cs['combined']}"
         )
     lines += ["", "### Decision reasons", ""]
     lines += [f"- {r}" for r in card.diagnostics.get("decision_reasons", [])]

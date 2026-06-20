@@ -103,6 +103,39 @@ class AblationRecord:
 
 
 @dataclass
+class PatchingRecord:
+    """One judged generation in an activation-patching (oracle) run.
+
+    The strongest localization test SIEVE supports. Steering/ablation add or
+    remove a *learned* direction; patching transplants the *actual* activation
+    from a clean run into a corrupted run, so the full-site patch is a
+    ground-truth ("oracle") measure of how much causal content lives at that
+    site. The audit then asks the calibration question: does patching ONLY the
+    audited direction's component recover that effect, or is the direction a
+    correlate that the site's real mechanism doesn't run through? Arms:
+
+    - ``corrupt``: behavior on the corrupted prompt (the counterfactual floor),
+    - ``patch_full``: corrupt run with the FULL residual at the site patched from
+      clean — the oracle (100%) restoration,
+    - ``patch_direction``: corrupt run with ONLY the audited direction's component
+      patched from clean — the direction's restoration,
+    - ``patch_random``: corrupt run patching a random direction's component — the
+      matched control, so "the direction restored behavior" is not confounded by
+      the generic effect of patching some coordinate,
+    - ``clean`` (optional): clean-prompt behavior, to report how complete the
+      full-site patch is relative to the full clean↔corrupt gap.
+
+    Faithful ⟺ direction-patch recovers a large fraction of the full-site
+    (oracle) effect AND more than the random-patch control.
+    """
+
+    arm: str                        # clean | corrupt | patch_full | patch_direction | patch_random
+    prompt_id: str
+    layers: list[int]               # the patched site(s); identical across all records
+    judge_scores: dict[str, float]  # judge name -> target-behavior score in [0, 1]
+
+
+@dataclass
 class DeploymentEvidence:
     """Optional off-distribution probe scores for the deployment lens.
 
@@ -211,6 +244,10 @@ class EvidenceBundle:
     # optional off-distribution probe scores for the deployment lens; absent by
     # default, in which case the lens reports off-distribution as "not assessed".
     deployment: "DeploymentEvidence | None" = None
+    # optional activation-patching (oracle) evidence: calibrates how faithfully
+    # the audited direction captures the site's causal content. Empty by default,
+    # so the gate is purely additive.
+    patching: list[PatchingRecord] = field(default_factory=list)
 
     bundle_version: str = "0.1"
 
@@ -237,6 +274,11 @@ class EvidenceBundle:
             key = ("ml", r.arm, r.prompt_id, tuple(sorted(r.layers)))
             if key in seen:
                 raise ValueError(f"duplicate multilayer record: {key}")
+            seen.add(key)
+        for r in self.patching:
+            key = ("patch", r.arm, r.prompt_id, tuple(sorted(r.layers)))
+            if key in seen:
+                raise ValueError(f"duplicate patching record: {key}")
             seen.add(key)
 
     # ---- (de)serialization ----
@@ -266,6 +308,7 @@ class EvidenceBundle:
             steering=[SteeringRecord(**r) for r in d.get("steering", [])],
             ablation=[AblationRecord(**r) for r in d.get("ablation", [])],
             multilayer=[MultiLayerRecord(**r) for r in d.get("multilayer", [])],
+            patching=[PatchingRecord(**r) for r in d.get("patching", [])],
             leakage=LeakageEvidence(**lk) if lk else None,
             deployment=DeploymentEvidence(**dep) if dep else None,
             bundle_version=d.get("bundle_version", "0.1"),
@@ -288,6 +331,10 @@ class EvidenceBundle:
     @property
     def multilayer_arms(self) -> list[str]:
         return sorted({r.arm for r in self.multilayer})
+
+    @property
+    def patching_arms(self) -> list[str]:
+        return sorted({r.arm for r in self.patching})
 
     @property
     def judge_names(self) -> list[str]:

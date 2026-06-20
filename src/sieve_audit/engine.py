@@ -31,6 +31,7 @@ from .deployment import DeploymentLensResult, run_deployment
 from .leakage import LeakageResult, run_leakage
 from .multilayer import MultiLayerResult, run_multilayer
 from .necessity import NecessityResult, run_necessity
+from .oracle import OracleResult, run_oracle
 from .verdict import AuditCard, Decision, decide
 
 
@@ -43,6 +44,7 @@ class AuditResult:
     necessity: NecessityResult | None = None     # optional ablation gate (#2)
     multilayer: MultiLayerResult | None = None    # optional joint multi-layer gate
     leakage: LeakageResult | None = None          # optional Tier-2 leakage gate
+    oracle: OracleResult | None = None            # optional patching calibration gate
     deployment: DeploymentLensResult | None = None  # optional practitioner FP/FN lens
 
 
@@ -181,6 +183,12 @@ def run_audit(
             multilayer = run_multilayer(bundle.multilayer, cfg)
         except ValueError:
             multilayer = None  # additive; never blocks the sufficiency verdict
+    oracle = None
+    if bundle.patching:
+        try:
+            oracle = run_oracle(bundle.patching, cfg)
+        except ValueError:
+            oracle = None  # additive; never blocks the sufficiency verdict
     leakage = None
     if bundle.leakage is not None:
         try:
@@ -221,7 +229,7 @@ def run_audit(
 
     card = build_card(
         bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check,
-        necessity, leakage, multilayer, deployment,
+        necessity, leakage, multilayer, deployment, oracle,
     )
     return AuditResult(
         card=card,
@@ -231,5 +239,6 @@ def run_audit(
         necessity=necessity,
         multilayer=multilayer,
         leakage=leakage,
+        oracle=oracle,
         deployment=deployment,
     )
