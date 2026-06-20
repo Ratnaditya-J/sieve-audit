@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from .bundle import EvidenceBundle
+from .calibration import run_calibration
 from .card import write_card
 from .config import AuditConfig
 from .engine import run_audit
@@ -85,6 +86,22 @@ def _cmd_selftest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_calibrate(args: argparse.Namespace) -> int:
+    cfg = AuditConfig(seed=args.seed)
+    rep = run_calibration(cfg=cfg)
+    print(
+        f"[sieve] calibration on {rep.n} ground-truth cases: "
+        f"accuracy {rep.accuracy:.0%} ({rep.n_correct}/{rep.n}); "
+        f"false negatives (truly-causal -> not_causally_sufficient): "
+        f"{rep.false_negatives}"
+    )
+    for expected, got in rep.confusion.items():
+        print(f"  expected {expected:28s} -> {got}")
+    for m in rep.mismatches:
+        print(f"  MISMATCH {m['name']}: expected {m['expected']} got {m['got']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="sieve",
@@ -120,6 +137,13 @@ def main(argv: list[str] | None = None) -> int:
     p_self.add_argument("--out", default=None, help="also write the six audit cards here")
     p_self.add_argument("--seed", type=int, default=0)
     p_self.set_defaults(func=_cmd_selftest)
+
+    p_cal = sub.add_parser(
+        "calibrate",
+        help="report the verdict's error rate vs ground-truth cases (#3)",
+    )
+    p_cal.add_argument("--seed", type=int, default=0)
+    p_cal.set_defaults(func=_cmd_calibrate)
 
     args = parser.parse_args(argv)
     if not args.command:
