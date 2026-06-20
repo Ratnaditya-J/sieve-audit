@@ -27,11 +27,20 @@ from .verdict import (
 )
 
 
-def _causal_summary(verdict, necessity) -> dict:
-    """Cross-method agreement (#4): integrate sufficiency (steering) and
-    necessity (ablation) into one read, flagging — never hiding — disagreement
-    or single-method coverage. No single method's result stands in for the
-    whole causal picture."""
+def _ml_state(multilayer) -> str:
+    """'untested' | 'inconclusive' | 'necessary_joint' | 'not_necessary_joint'."""
+    if multilayer is None:
+        return "untested"
+    if multilayer.inconclusive:
+        return "inconclusive"
+    return "necessary_joint" if multilayer.necessary else "not_necessary_joint"
+
+
+def _causal_summary(verdict, necessity, multilayer=None) -> dict:
+    """Cross-method agreement (#4): integrate sufficiency (steering), necessity
+    (single-layer ablation), and the joint multi-layer test into one read,
+    flagging — never hiding — disagreement or single-method coverage. No single
+    method's result stands in for the whole causal picture."""
     if verdict == Verdict.CAUSALLY_SUFFICIENT:
         suff = "sufficient"
     elif verdict == Verdict.NOT_CAUSALLY_SUFFICIENT:
@@ -46,8 +55,18 @@ def _causal_summary(verdict, necessity) -> dict:
         nec = "necessary"
     else:
         nec = "not_necessary"
+    ml = _ml_state(multilayer)
 
-    if suff == "sufficient" and nec == "necessary":
+    # The distributed-mechanism signature dominates the read: joint multi-layer
+    # ablation is necessary while the single-layer test was not. This is the
+    # exact false-negative a single-layer (steering- or ablation-only) verdict
+    # cannot see, so it is surfaced above the single-layer combination.
+    if ml == "necessary_joint" and nec in ("not_necessary", "inconclusive", "untested"):
+        combined = ("DISTRIBUTED MECHANISM: joint multi-layer ablation is necessary "
+                    "while single-layer ablation is not — the signal is causally "
+                    "load-bearing across layers, invisible to single-layer "
+                    "interventions")
+    elif suff == "sufficient" and nec == "necessary":
         combined = ("sufficient AND necessary — strong causal evidence under the "
                     "tested interventions")
     elif suff == "not_sufficient" and nec == "necessary":
@@ -57,24 +76,46 @@ def _causal_summary(verdict, necessity) -> dict:
         combined = ("sufficient but NOT necessary — likely one of several redundant "
                     "pathways")
     elif suff == "not_sufficient" and nec == "not_necessary":
+        extra = (
+            " (and joint multi-layer ablation also not necessary — layer-robust null)"
+            if ml == "not_necessary_joint" else ""
+        )
         combined = ("neither sufficient nor necessary under the tested interventions "
-                    "— limited causal role")
+                    "— limited causal role" + extra)
     else:
         combined = (f"single-method evidence only (sufficiency={suff}, "
                     f"necessity={nec}); cross-method agreement not established")
-    return {"sufficiency": suff, "necessity": nec, "combined": combined}
+    return {"sufficiency": suff, "necessity": nec, "multilayer": ml, "combined": combined}
 
 
-def _headline_label(verdict, status: str, necessity, leakage=None) -> str:
+def _necessity_phrase(necessity, multilayer) -> str | None:
+    """Human phrase rolling single-layer and joint multi-layer necessity.
+
+    Returns None when neither test reached a conclusion (so the headline falls
+    back to the bare verdict/status)."""
+    ml_nec = multilayer is not None and not multilayer.inconclusive and multilayer.necessary
+    sl_known = necessity is not None and not necessity.inconclusive
+    sl_nec = sl_known and necessity.necessary
+    if ml_nec and not sl_nec:
+        return "necessary (multi-layer)"
+    if sl_nec:
+        return "necessary"
+    if sl_known:   # single-layer concluded not-necessary, joint did not rescue it
+        return "not necessary"
+    return None
+
+
+def _headline_label(verdict, status: str, necessity, leakage=None, multilayer=None) -> str:
     """Human-facing headline. Rolls the sufficiency-pipeline verdict together
-    with the necessity finding (so a real necessity result is surfaced, not
-    buried under a bare 'insufficient_protocol') and flags leakage. Falls back to
-    the formal verdict/status when there is no conclusive necessity evidence."""
+    with the necessity finding — single-layer or joint multi-layer (so a real
+    necessity result is surfaced, not buried under a bare 'insufficient_protocol')
+    — and flags leakage. Falls back to the formal verdict/status when no
+    necessity test reached a conclusion."""
     base = verdict.value if verdict is not None else status
     leak = " · leaky" if (leakage is not None and leakage.leaky) else ""
-    if necessity is None or necessity.inconclusive:
+    nec = _necessity_phrase(necessity, multilayer)
+    if nec is None:
         return base + leak
-    nec = "necessary" if necessity.necessary else "not necessary"
     if verdict is None:
         return f"{nec} · sufficiency not established{leak}"
     return f"{base} · {nec}{leak}"
@@ -109,6 +150,7 @@ def build_card(
     prereg_check=None,
     necessity=None,
     leakage=None,
+    multilayer=None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
     # Causal intervention(s) actually run; causal verdicts are bounded to these so
@@ -143,6 +185,54 @@ def build_card(
                     "convergent evidence of a limited causal role under the tested "
                     "interventions."
                 )
+    # --- joint multi-layer ablation (committee / distributed-mechanism test) ---
+    multilayer_claims: list[str] = []
+    multilayer_risks: list[str] = []
+    sl_not_necessary = (
+        necessity is not None
+        and not necessity.inconclusive
+        and not necessity.necessary
+    )
+    if multilayer is not None:
+        if multilayer.inconclusive:
+            multilayer_risks.append(
+                "Joint multi-layer ablation evidence was provided but could not be "
+                "adjudicated: " + "; ".join(multilayer.notes)
+            )
+        else:
+            tested_interventions = tested_interventions + [
+                f"joint multi-layer ablation (layers {multilayer.layers})"
+            ]
+            if multilayer.necessary and sl_not_necessary:
+                multilayer_claims.append(
+                    "DISTRIBUTED MECHANISM: joint ablation across layers "
+                    f"{multilayer.layers} IS necessary while single-layer ablation "
+                    "was NOT. Direct evidence the signal is causally load-bearing "
+                    "across layers — the false-negative a single-layer (steering- "
+                    "or ablation-only) verdict cannot see. It is NOT causally inert."
+                )
+            elif multilayer.necessary:
+                multilayer_claims.append(
+                    f"Under joint ablation across layers {multilayer.layers}, the "
+                    "signal is necessary: removing it jointly degrades the behavior "
+                    "more than an ablate_random control — consistent with the "
+                    "single-layer necessity finding."
+                )
+            else:
+                multilayer_claims.append(
+                    f"Even under joint ablation across layers {multilayer.layers}, "
+                    "the signal is NOT necessary: a layer-robust null that single-"
+                    "layer ablation alone could not establish."
+                )
+    # Over-read guard: a single-layer not-necessary null must NOT be read as
+    # "no causal role" unless the distributed case was actually tested.
+    if sl_not_necessary and (multilayer is None or multilayer.inconclusive):
+        multilayer_risks.append(
+            "Necessity was tested at single layer(s) only; a distributed, "
+            "multi-layer ('committee') mechanism was NOT tested and cannot be ruled "
+            "out by this null. Supply multi-layer ablation evidence to close this gap."
+        )
+
     interventions_str = ", ".join(tested_interventions) or "none (causal stage not run)"
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
     bundle_hash = _canonical_hash(bundle.to_dict())
@@ -176,10 +266,16 @@ def build_card(
         diagnostics["controls"] = controls.to_dict()
     if necessity is not None:
         diagnostics["necessity"] = necessity.to_dict()
+    if multilayer is not None:
+        diagnostics["multilayer"] = multilayer.to_dict()
     if leakage is not None:
         diagnostics["leakage"] = leakage.to_dict()
-    diagnostics["causal_summary"] = _causal_summary(decision.verdict, necessity)
-    headline = _headline_label(decision.verdict, decision.status, necessity, leakage)
+    diagnostics["causal_summary"] = _causal_summary(
+        decision.verdict, necessity, multilayer
+    )
+    headline = _headline_label(
+        decision.verdict, decision.status, necessity, leakage, multilayer
+    )
 
     if decision.verdict is not None:
         allowed = [
@@ -212,7 +308,7 @@ def build_card(
             ]
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
-    allowed = allowed + necessity_claims
+    allowed = allowed + necessity_claims + multilayer_claims
 
     risks = list(RESIDUAL_RISKS_COMMON)
     if risks_prereg:
@@ -231,6 +327,7 @@ def build_card(
         for arm, res in sorted(efficacy.items()):
             risks.extend(f"[{arm}] {n}" for n in res.notes)
     risks.extend(necessity_risks)
+    risks.extend(multilayer_risks)
     if leakage is not None and leakage.leaky:
         risks.insert(
             0,
@@ -309,6 +406,14 @@ def _profile_line(card: AuditCard) -> str:
 def card_to_markdown(card: AuditCard) -> str:
     verdict_str = card.label or (card.verdict.value if card.verdict else card.status)
     interv = ", ".join(card.tested_interventions)
+    untested = []
+    if "ablation" not in card.tested_interventions:
+        untested.append("necessity (ablation)")
+    if not any(i.startswith("joint multi-layer ablation") for i in card.tested_interventions):
+        untested.append("distributed/multi-layer mechanisms")
+    caveat = "  ·  causal verdicts are bounded to these" + (
+        f"; {' and '.join(untested)} not tested" if untested else ""
+    )
     lines = [
         f"# SIEVE audit card — `{verdict_str}`",
         "",
@@ -318,12 +423,7 @@ def card_to_markdown(card: AuditCard) -> str:
         f"config `{card.config_hash}`, bundle `{card.bundle_hash}`)",
         ">",
         f"> **Tested intervention(s):** {interv or '— (causal stage not run)'}"
-        + (
-            "  ·  causal verdicts are bounded to these; necessity (ablation) and "
-            "distributed/multi-layer mechanisms were not tested"
-            if interv
-            else ""
-        ),
+        + (caveat if interv else ""),
         ">",
         f"> {_profile_line(card)}",
     ]
@@ -405,11 +505,27 @@ def card_to_markdown(card: AuditCard) -> str:
                 f"(probe-ablation drop {_fmt_ci(nec['probe_drop'])}; "
                 f"vs ablate_random {_fmt_ci(nec['probe_vs_random_drop'])})"
             )
+    ml = card.diagnostics.get("multilayer")
+    if ml:
+        if ml["inconclusive"]:
+            lines.append(
+                f"- Multi-layer ablation (joint layers {ml['layers']}): "
+                "inconclusive — " + "; ".join(ml["notes"])
+            )
+        else:
+            mn = ml["necessity"]
+            lines.append(
+                f"- Multi-layer ablation (joint layers {ml['layers']}): "
+                f"{'NECESSARY (joint)' if ml['necessary'] else 'not necessary (joint)'} "
+                f"(joint-ablation drop {_fmt_ci(mn['probe_drop'])}; "
+                f"vs ablate_random {_fmt_ci(mn['probe_vs_random_drop'])})"
+            )
     cs = card.diagnostics.get("causal_summary")
     if cs:
+        ml_part = f", multilayer={cs['multilayer']}" if cs.get("multilayer") else ""
         lines.append(
             f"- **Causal summary:** sufficiency={cs['sufficiency']}, "
-            f"necessity={cs['necessity']} → {cs['combined']}"
+            f"necessity={cs['necessity']}{ml_part} → {cs['combined']}"
         )
     lines += ["", "### Decision reasons", ""]
     lines += [f"- {r}" for r in card.diagnostics.get("decision_reasons", [])]

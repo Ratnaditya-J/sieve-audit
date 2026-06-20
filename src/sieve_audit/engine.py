@@ -28,6 +28,7 @@ from .controls import PROBE_ARM, ControlsResult, run_controls
 from .decodability import DecodabilityResult, run_decodability
 from .efficacy import EfficacyResult, run_efficacy_all_arms
 from .leakage import LeakageResult, run_leakage
+from .multilayer import MultiLayerResult, run_multilayer
 from .necessity import NecessityResult, run_necessity
 from .verdict import AuditCard, Decision, decide
 
@@ -39,6 +40,7 @@ class AuditResult:
     efficacy: dict[str, EfficacyResult] | None   # per steering arm
     controls: ControlsResult | None
     necessity: NecessityResult | None = None     # optional ablation gate (#2)
+    multilayer: MultiLayerResult | None = None    # optional joint multi-layer gate
     leakage: LeakageResult | None = None          # optional Tier-2 leakage gate
 
 
@@ -171,6 +173,12 @@ def run_audit(
             # necessity is additive; a failure must not block the sufficiency
             # verdict — it simply omits the necessity finding from the card.
             necessity = None
+    multilayer = None
+    if bundle.multilayer:
+        try:
+            multilayer = run_multilayer(bundle.multilayer, cfg)
+        except ValueError:
+            multilayer = None  # additive; never blocks the sufficiency verdict
     leakage = None
     if bundle.leakage is not None:
         try:
@@ -206,7 +214,7 @@ def run_audit(
 
     card = build_card(
         bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check,
-        necessity, leakage,
+        necessity, leakage, multilayer,
     )
     return AuditResult(
         card=card,
@@ -214,5 +222,6 @@ def run_audit(
         efficacy=efficacy,
         controls=controls,
         necessity=necessity,
+        multilayer=multilayer,
         leakage=leakage,
     )

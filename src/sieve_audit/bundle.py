@@ -103,6 +103,28 @@ class AblationRecord:
 
 
 @dataclass
+class MultiLayerRecord:
+    """One judged generation with a *joint multi-layer* intervention.
+
+    The committee gap: a probe reads one layer, so a single-layer steering or
+    ablation can show no effect even when the direction is causally load-bearing
+    — because the mechanism is distributed and the other layers compensate. This
+    record carries an intervention applied at SEVERAL layers at once, so a
+    single-layer null is not mistaken for "no causal role".
+
+    Same arms as ``AblationRecord`` (``baseline`` / ``probe`` / ``ablate_random``)
+    — necessity adjudicated exactly as for single-layer ablation, but over the
+    joint layer set. ``layers`` is the set of layers intervened together and must
+    be identical across every record in the section (one joint intervention).
+    """
+
+    arm: str                        # "baseline" | "probe" | "ablate_random"
+    prompt_id: str
+    layers: list[int]               # the layers jointly intervened (same for all records)
+    judge_scores: dict[str, float]  # judge name -> target-behavior score in [0, 1]
+
+
+@dataclass
 class LeakageEvidence:
     """Probe scores under three input conditions, for the leakage (Boxo) check.
 
@@ -155,6 +177,10 @@ class EvidenceBundle:
     # optional necessity evidence (#2): empty by default, so a bundle without
     # ablation audits exactly as before — the necessity gate is purely additive.
     ablation: list[AblationRecord] = field(default_factory=list)
+    # optional multi-layer (joint) ablation evidence: detects a distributed
+    # ("committee") mechanism a single-layer intervention misses. Empty by
+    # default, so the gate is purely additive.
+    multilayer: list[MultiLayerRecord] = field(default_factory=list)
     # optional leakage evidence (Tier-2): probe scores under full / leak-removed
     # / random-removed inputs; absent by default, so the gate is purely additive.
     leakage: "LeakageEvidence | None" = None
@@ -179,6 +205,11 @@ class EvidenceBundle:
             key = ("ablate", r.arm, r.prompt_id)
             if key in seen:
                 raise ValueError(f"duplicate ablation record: {key}")
+            seen.add(key)
+        for r in self.multilayer:
+            key = ("ml", r.arm, r.prompt_id, tuple(sorted(r.layers)))
+            if key in seen:
+                raise ValueError(f"duplicate multilayer record: {key}")
             seen.add(key)
 
     # ---- (de)serialization ----
@@ -206,6 +237,7 @@ class EvidenceBundle:
             efficacy=[EfficacyRecord(**r) for r in d.get("efficacy", [])],
             steering=[SteeringRecord(**r) for r in d.get("steering", [])],
             ablation=[AblationRecord(**r) for r in d.get("ablation", [])],
+            multilayer=[MultiLayerRecord(**r) for r in d.get("multilayer", [])],
             leakage=LeakageEvidence(**lk) if lk else None,
             bundle_version=d.get("bundle_version", "0.1"),
         )
@@ -223,6 +255,10 @@ class EvidenceBundle:
     @property
     def ablation_arms(self) -> list[str]:
         return sorted({r.arm for r in self.ablation})
+
+    @property
+    def multilayer_arms(self) -> list[str]:
+        return sorted({r.arm for r in self.multilayer})
 
     @property
     def judge_names(self) -> list[str]:
