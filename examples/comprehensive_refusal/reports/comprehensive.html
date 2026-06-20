@@ -1,0 +1,49 @@
+<!doctype html><meta charset="utf-8">
+<title>SIEVE deployment report — surface_confounded · necessary</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 760px; margin: 2rem auto;
+          color: #111; line-height: 1.5; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 1.6rem; }
+  .verdict { background:#f3f4f6; border-left:4px solid #2563eb; padding:.6rem .9rem;
+             border-radius:4px; font-weight:600; }
+  .scope { color:#555; font-size:.9rem; }
+  table { border-collapse: collapse; width: 100%; margin-top:.5rem; }
+  th, td { border: 1px solid #ddd; padding: .35rem .6rem; text-align: left; font-size:.9rem; }
+  th { background:#f9fafb; }
+  .hint { color:#666; font-size:.85rem; }
+  @media print { body { margin: 0; } }
+</style>
+<h1>SIEVE deployment report</h1>
+<p class="verdict">Verdict: surface_confounded · necessary</p>
+<p class="scope">Qwen/Qwen2.5-1.5B-Instruct · layer(s) [14] · contrastive mean-diff (z-scored, last-token), refusal direction · AdvBench harmful vs templated benign instructions</p>
+<h2>What this means for a deployer</h2>
+<ul><li>In-distribution, at a 5% false-alarm rate this probe flags about 100% of the cases it should (95% CI 100%–100%).</li><li>Off-distribution (a different prompt mix, closer to the wild), the same 5% false-alarm setting catches about 100% (95% CI 100%–100%).</li><li>With the giveaway text removed, recall at 5% FPR falls to about 100%: the realistic floor when the behavior isn't spelled out in the transcript.</li><li>Bottom line: choose your threshold from the ROC curve — lower it to miss fewer cases (more false alarms), raise it to cut false alarms (more misses).</li></ul>
+<h2>Operating points</h2>
+<table><tr><th>Condition</th><th>FPR budget</th><th>Recall (95% CI)</th></tr><tr><td>in_distribution</td><td>1%</td><td>100% [100%, 100%]</td></tr><tr><td>in_distribution</td><td>5%</td><td>100% [100%, 100%]</td></tr><tr><td>in_distribution</td><td>10%</td><td>100% [100%, 100%]</td></tr><tr><td>off_distribution</td><td>1%</td><td>100% [100%, 100%]</td></tr><tr><td>off_distribution</td><td>5%</td><td>100% [100%, 100%]</td></tr><tr><td>off_distribution</td><td>10%</td><td>100% [100%, 100%]</td></tr><tr><td>leakage_removed</td><td>1%</td><td>100% [100%, 100%]</td></tr><tr><td>leakage_removed</td><td>5%</td><td>100% [100%, 100%]</td></tr><tr><td>leakage_removed</td><td>10%</td><td>100% [100%, 100%]</td></tr></table>
+<h2>ROC curves</h2>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 440" font-family="sans-serif" font-size="12">
+<rect x="0" y="0" width="440" height="440" fill="white"/>
+<line x1="50" y1="50" x2="50" y2="390" stroke="#222"/>
+<line x1="50" y1="390" x2="390" y2="390" stroke="#222"/>
+<line x1="50" y1="390" x2="390" y2="50" stroke="#bbb" stroke-dasharray="4 4"/>
+<text x="220.0" y="428" text-anchor="middle">False-alarm rate (FPR)</text>
+<text x="14" y="220.0" text-anchor="middle" transform="rotate(-90 14 220.0)">Recall (TPR)</text>
+<text x="50.0" y="406" text-anchor="middle" fill="#555">0.0</text>
+<text x="42" y="394.0" text-anchor="end" fill="#555">0.0</text>
+<text x="220.0" y="406" text-anchor="middle" fill="#555">0.5</text>
+<text x="42" y="224.0" text-anchor="end" fill="#555">0.5</text>
+<text x="390.0" y="406" text-anchor="middle" fill="#555">1.0</text>
+<text x="42" y="54.0" text-anchor="end" fill="#555">1.0</text>
+<polyline points="50.0,390.0 50.0,384.3 50.0,50.0 390.0,50.0" fill="none" stroke="#2563eb" stroke-width="2"/>
+<rect x="60" y="47" width="12" height="3" fill="#2563eb"/>
+<text x="78" y="52">in_distribution (AUROC 1.00)</text>
+<polyline points="50.0,390.0 50.0,384.3 50.0,50.0 390.0,50.0" fill="none" stroke="#16a34a" stroke-width="2"/>
+<rect x="60" y="65" width="12" height="3" fill="#16a34a"/>
+<text x="78" y="70">off_distribution (AUROC 1.00)</text>
+<polyline points="50.0,390.0 50.0,384.3 50.0,50.0 390.0,50.0" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="60" y="83" width="12" height="3" fill="#dc2626"/>
+<text x="78" y="88">leakage_removed (AUROC 1.00)</text>
+</svg>
+<p class="hint">Pick a threshold from the curve: lower it to miss fewer cases
+(more false alarms), raise it to cut false alarms (more misses). To save as PDF,
+use your browser's Print → Save as PDF.</p>

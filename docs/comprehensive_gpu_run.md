@@ -1,4 +1,16 @@
-# Comprehensive GPU run — plan (resume here)
+# Comprehensive GPU run — plan + result
+
+> **DONE (2026-06-20).** Executed on Qwen2.5-1.5B-Instruct (A40, ~$0.54).
+> Verdict **`surface_confounded · necessary`** — all eight axes captured, no
+> insufficient_protocol. Worked example, bundle and reports:
+> [examples/comprehensive_refusal/](../examples/comprehensive_refusal/). The
+> runner gaps below were closed; the adapter now emits every axis. The oracle
+> came back honestly *inconclusive* (single-site patching did not move the
+> model's refusal — no oracle effect to calibrate against).
+
+---
+
+## Original plan (resume reference)
 
 Goal: **one** real model run that exercises **every** SIEVE axis end-to-end and
 produces a single audit card with **no incomplete / insufficient verdict** —
