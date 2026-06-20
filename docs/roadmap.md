@@ -7,6 +7,15 @@ that reports the criterion's error rate vs ground truth; a human **headline
 label** that surfaces necessity instead of burying it under
 `insufficient_protocol`; and a real end-to-end demo (`examples/refusal_necessity`).
 
+**Update 2026-06-20 — all four items below are now SHIPPED (core + tests):**
+(1) Tier-2 leakage gate (`leakage.py`, keeps TF-IDF, adds span-removal +
+random-removal control); (2) deployment lens with ROC curves + recall@FPR +
+plain-language + HTML/PDF export (`deployment.py`, `report.py`); (3) multi-layer
+joint-ablation gate (`multilayer.py`, the committee/distributed-mechanism test);
+(4) oracle activation-patching calibration (`oracle.py`, direction-faithfulness).
+Remaining: the GPU adapter must emit evidence for the new axes — see
+[comprehensive_gpu_run.md](comprehensive_gpu_run.md).
+
 The items below came out of design review. Each is additive and keeps the
 "never claim more than you tested; report which checks ran" discipline.
 
