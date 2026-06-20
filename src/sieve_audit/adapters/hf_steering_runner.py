@@ -825,6 +825,20 @@ def cmd_bundle(args) -> int:
             "judge silently shrinks the evidence; check judge output before trusting the audit"
         )
 
+    ablation = []
+    if getattr(args, "judged_ablation", None):
+        abl_rows = [json.loads(l) for l in Path(args.judged_ablation).read_text().splitlines() if l.strip()]
+        ablation = [
+            AblationRecord(
+                arm=r["arm"],
+                prompt_id=r["prompt_id"],
+                judge_scores={k: v for k, v in r["judge_scores"].items()
+                              if isinstance(v, (int, float)) and math.isfinite(v)},
+            )
+            for r in abl_rows
+        ]
+        ablation = [r for r in ablation if len(r.judge_scores) >= 2]
+
     bundle = EvidenceBundle(
         model=args.model,
         revision=args.revision,
@@ -837,11 +851,12 @@ def cmd_bundle(args) -> int:
         decodability=decodability,
         efficacy=efficacy,
         steering=steering,
+        ablation=ablation,
     )
     bundle.validate()
     bundle.save(args.out)
-    print(f"[bundle] decodability n={len(decode_records)}, "
-          f"efficacy records={len(efficacy)}, steering records={len(steering)}")
+    print(f"[bundle] decodability n={len(decode_records)}, efficacy={len(efficacy)}, "
+          f"steering={len(steering)}, ablation={len(ablation)}")
     print(f"[bundle] -> {args.out}   (next: sieve audit --bundle {args.out})")
     return 0
 
@@ -1053,6 +1068,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--decode", type=Path, required=True)
     p.add_argument("--steer", type=Path, required=True)
     p.add_argument("--judged", type=Path, required=True)
+    p.add_argument("--judged-ablation", type=Path, default=None,
+                   help="optional judged ablation generations to fold in (necessity), "
+                        "so one bundle yields a complete decode+steer+ablate verdict")
     p.add_argument("--model", required=True)
     p.add_argument("--revision", default=None)
     p.add_argument("--layer", type=int, required=True)
