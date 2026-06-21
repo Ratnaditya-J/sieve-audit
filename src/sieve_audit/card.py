@@ -190,6 +190,15 @@ def _base_residual_risks(efficacy, controls, necessity, multilayer) -> list[str]
     return risks
 
 
+def _strip_license_suffix(distribution: str) -> str:
+    """Remove a trailing ' (license: ...)' that was inadvertently baked into
+    the distribution string.  The license belongs in the separate prompt_license
+    field; the renderer appends it explicitly, so embedding it in distribution
+    produces duplicate text."""
+    idx = distribution.find(" (license:")
+    return distribution[:idx].strip() if idx != -1 else distribution
+
+
 def _canonical_hash(obj: object) -> str:
     return hashlib.sha256(
         json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode()
@@ -570,8 +579,11 @@ def card_to_markdown(card: AuditCard) -> str:
         f"- **Model:** {card.model}" + (f" @ {card.revision}" if card.revision else ""),
         f"- **Layer(s):** {card.layers}",
         f"- **Direction:** {card.direction_source}",
-        f"- **Prompts:** {card.prompt_distribution} "
-        f"(license: {card.prompt_license}, n={card.n_prompts})",
+        "- **Prompts:** "
+        # strip any "(license: ...)" suffix that pod_run.sh may have embedded in the
+        # distribution string (older bundles baked license into the distribution field)
+        + _strip_license_suffix(card.prompt_distribution)
+        + f" (license: {card.prompt_license}, n={card.n_prompts})",
         f"- **Alpha grid:** {card.alpha_grid}",
         f"- **Behavioral metric(s):** {', '.join(card.behavioral_metrics) or '—'}",
         f"- **Judges:** {', '.join(card.judges) or '—'}",

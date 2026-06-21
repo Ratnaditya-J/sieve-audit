@@ -34,7 +34,7 @@ DTYPE="${DTYPE:-bfloat16}"
 
 DIR_SOURCE="contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out"
 DIST="AdvBench harmful vs templated benign instructions"
-LICENSE="AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120"
+LICENSE="AdvBench prompts (llm-attacks, MIT); benign templates CC0"
 
 RUN="python -m sieve_audit.adapters.hf_steering_runner"
 mkdir -p "$OUT"
@@ -130,7 +130,7 @@ $RUN bundle \
   --ood-distribution "AdvBench reworded (Question:...)" \
   --model "$MODEL" \
   --direction-source "$DIR_SOURCE" \
-  --prompt-distribution "$DIST (license: $LICENSE)" \
+  --prompt-distribution "$DIST" \
   --prompt-license "$LICENSE" \
   --metric "$METRIC" \
   --attest-out-of-sample \

@@ -15,7 +15,7 @@
 </style>
 <h1>SIEVE deployment report</h1>
 <p class="verdict">Verdict: surface_confounded · necessary</p>
-<p class="scope">Qwen/Qwen2.5-1.5B-Instruct · layer(s) [14] · contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out · AdvBench harmful vs templated benign instructions (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120)</p>
+<p class="scope">Qwen/Qwen2.5-1.5B-Instruct · layer(s) [14] · contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out · AdvBench harmful vs templated benign instructions</p>
 <h2>What this means for a deployer</h2>
 <ul><li>In-distribution, at a 5% false-alarm rate this probe flags about 100% of the cases it should (95% CI 100%–100%).</li><li>Off-distribution (a different prompt mix, closer to the wild), the same 5% false-alarm setting catches about 100% (95% CI 100%–100%).</li><li>With the giveaway text removed, recall at 5% FPR falls to about 100%: the realistic floor when the behavior isn't spelled out in the transcript.</li><li>Bottom line: choose your threshold from the ROC curve — lower it to miss fewer cases (more false alarms), raise it to cut false alarms (more misses).</li></ul>
 <h2>Operating points</h2>

@@ -5,8 +5,8 @@
   14
  ],
  "direction_source": "contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out",
- "prompt_distribution": "AdvBench harmful vs templated benign instructions (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120)",
- "prompt_license": "AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120",
+ "prompt_distribution": "AdvBench harmful vs templated benign instructions",
+ "prompt_license": "AdvBench prompts (llm-attacks, MIT); benign templates CC0",
  "n_prompts": 120,
  "alpha_grid": [
   -0.2,
@@ -56,6 +56,7 @@
     "orthogonal",
     "wrong_layer"
    ],
+   "min_random_controls": 1,
    "min_steered_prompts": 20,
    "require_symmetric_grid": true,
    "min_shared_efficacy_prompts": 10,
@@ -761,7 +762,7 @@
  "status": "ok",
  "label": "surface_confounded \u00b7 necessary",
  "allowed_claims": [
-  "Under [model=Qwen/Qwen2.5-1.5B-Instruct, layer(s)=14, direction=contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out, prompts=AdvBench harmful vs templated benign instructions (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120), metrics=refusal, single-layer additive steering/ablation/multilayer ablation/activation patching], the signal is decodable but matched by a surface (text-statistics) baseline; no activation-level claim is warranted.",
+  "Under [model=Qwen/Qwen2.5-1.5B-Instruct, layer(s)=14, direction=contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out, prompts=AdvBench harmful vs templated benign instructions, metrics=refusal, single-layer additive steering/ablation/multilayer ablation/activation patching], the signal is decodable but matched by a surface (text-statistics) baseline; no activation-level claim is warranted.",
   "Under ablation, the signal IS necessary: removing it degrades the behavior more than an ablate_random control. A not_causally_sufficient verdict here is consistent with a distributed/multi-layer mechanism that single-layer additive steering cannot induce \u2014 the signal is NOT causally inert.",
   "Under joint ablation across layers [12, 14, 16], the signal is necessary: removing it jointly degrades the behavior more than an ablate_random control \u2014 consistent with the single-layer necessity finding."
  ],
@@ -781,8 +782,8 @@
   "Oracle (patching) calibration evidence was provided but could not be adjudicated: full-site patch does not significantly restore behavior: the site carries no measurable causal content, so the direction cannot be calibrated against it"
  ],
  "protocol_version": "0.1",
- "config_hash": "b37c11511c6adebfac42fe14ce1b07a05d57ac623e4962a7bc0caa0b2ff6af74",
- "bundle_hash": "5ced3ec519415a5001ddc095f5aa48d00477175692b26e5081565b03d53fbab4",
+ "config_hash": "69606752f985ef0ec8d94e2ba9f4970696c15d134875b4d83da9a9315ad4e085",
+ "bundle_hash": "1fbf05355fce53db33ae47ba266aa43a43b34e235fec7314877f074495bd6759",
  "rerun_command": "sieve audit --bundle examples/comprehensive_refusal/bundle_all.json --seed 0",
  "preregistration": null
 }

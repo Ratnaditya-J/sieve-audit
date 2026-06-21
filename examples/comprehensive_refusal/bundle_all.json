@@ -5,8 +5,8 @@
   14
  ],
  "direction_source": "contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out",
- "prompt_distribution": "AdvBench harmful vs templated benign instructions (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120)",
- "prompt_license": "AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120",
+ "prompt_distribution": "AdvBench harmful vs templated benign instructions",
+ "prompt_license": "AdvBench prompts (llm-attacks, MIT); benign templates CC0",
  "behavioral_metrics": [
   "refusal"
  ],

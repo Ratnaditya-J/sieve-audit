@@ -46,6 +46,13 @@ produce bundles from models or published artifacts.
 - First real-world audit: the published Apollo deception probes
   (arXiv 2502.03407) from released artifacts —
   see [`examples/apollo_deception/`](examples/apollo_deception/).
+- End-to-end GPU run: Qwen2.5-1.5B-Instruct refusal direction, all eight
+  axes, multi-draw null (3 random controls) —
+  see [`examples/comprehensive_refusal/`](examples/comprehensive_refusal/).
+  Verdict `surface_confounded · necessary`: probe is causally load-bearing
+  (ablation) but scores are explained by surface text statistics on this
+  small model. Harder target (non-surface-confounded, subtler behavior) is
+  the natural next run.
 
 v0.1 scope: contrastive residual-stream directions in open-weight decoder LMs
 under single-layer additive steering.

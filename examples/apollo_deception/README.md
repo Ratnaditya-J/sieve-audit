@@ -1,5 +1,13 @@
 # Auditing the Apollo deception probes (arXiv 2502.03407)
 
+> **Note on config hash:** the audit cards in `reports/` were generated with
+> an earlier `sieve-audit` version.  The strict profile config hash has since
+> changed (a `min_random_controls` field was added to `AuditConfig`, shifting
+> the hash even though the value is the default 1).  The **verdict is
+> unchanged** (`insufficient_protocol` for both probes — SIEVE correctly
+> refuses a causal verdict when no steering evidence exists).  Re-run the
+> commands below to produce cards with the current hash.
+
 The first real-world SIEVE audit: the two published Apollo Research deception
 probes for Llama-3.3-70B-Instruct layer 22 —
 
