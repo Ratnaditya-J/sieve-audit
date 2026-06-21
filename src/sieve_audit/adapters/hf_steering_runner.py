@@ -223,14 +223,30 @@ def _input_device(model):
 
 
 def _encode(tokenizer, text: str, device):
+    # If text is a JSON-encoded message array (e.g. from system-prompt-aware prompts),
+    # pass it directly to apply_chat_template so system messages land in the right role.
+    msgs = None
+    stripped = text.lstrip()
+    if stripped.startswith("[") and not stripped.startswith("[["):
+        try:
+            candidates = json.loads(text)
+            if (isinstance(candidates, list) and candidates
+                    and isinstance(candidates[0], dict)
+                    and "role" in candidates[0]):
+                msgs = candidates
+        except (json.JSONDecodeError, ValueError):
+            pass
+    if msgs is None:
+        msgs = [{"role": "user", "content": text}]
     try:
         ids = tokenizer.apply_chat_template(
-            [{"role": "user", "content": text}],
+            msgs,
             return_tensors="pt",
             add_generation_prompt=True,
         )
     except Exception:
-        ids = tokenizer(text, return_tensors="pt").input_ids
+        raw = " ".join(m.get("content", "") for m in msgs)
+        ids = tokenizer(raw, return_tensors="pt").input_ids
     if hasattr(ids, "input_ids"):
         ids = ids.input_ids
     return ids.to(device)
@@ -562,13 +578,14 @@ def cmd_decode(args) -> int:
         raise SystemExit("holdout prompts need 'label' and 'family' fields")
 
     print(f"[decode] scoring {len(prompts)} holdout prompts at layer {layer}")
+    surface_field = getattr(args, "surface_text_field", "text")
     records = []
     for i, p in enumerate(prompts):
         h = _hidden_at_layer(model, tokenizer, p["text"], layer,
                              pool=args.pool)
         records.append({
             "prompt_id": p.get("prompt_id", f"h{i}"),
-            "text": p["text"],
+            "text": p.get(surface_field, p["text"]),
             "label": int(p["label"]),
             "family": str(p["family"]),
             "probe_score": float(h @ w),
@@ -641,9 +658,10 @@ def cmd_decode_lofo(args) -> int:
         scores[te] = X[te] @ w_f
     assert not np.isnan(scores).any()
 
+    surface_field = getattr(args, "surface_text_field", "text")
     records = [{
         "prompt_id": p.get("prompt_id", f"h{i}"),
-        "text": p["text"],
+        "text": p.get(surface_field, p["text"]),
         "label": int(p["label"]),
         "family": str(p["family"]),
         "probe_score": float(scores[i]),
@@ -1496,6 +1514,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="JSONL: {prompt_id, text, label, family}")
     p.add_argument("--pool", choices=["last", "mean"], default="last",
                    help="activation pooling; MUST match the vectors --pool")
+    p.add_argument("--surface-text-field", default="text", dest="surface_text_field",
+                   help="prompt field written to the bundle as 'text' for TF-IDF surface "
+                        "baselines; defaults to 'text'. Set to e.g. 'scenario' to scope "
+                        "TF-IDF to the scenario body only when the full prompt contains "
+                        "a surface treatment tag.")
     p.add_argument("--out", required=True)
     p.set_defaults(func=cmd_decode)
 
@@ -1516,6 +1539,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--layer-candidates", type=int, nargs="+", default=None,
                    help="explicit list of layers to sweep when --layer is omitted; "
                         "default: middle 50%% of model depth (25%%–75%%)")
+    p.add_argument("--surface-text-field", default="text", dest="surface_text_field",
+                   help="prompt field written to the bundle as 'text' for TF-IDF surface "
+                        "baselines; defaults to 'text'. Set to e.g. 'scenario' to scope "
+                        "TF-IDF to the scenario body only when the full prompt contains "
+                        "a surface treatment tag (e.g. <is_free_tier_user>).")
     p.add_argument("--save-vectors", required=True,
                    help=".npz: full-data direction (+controls, +selected_layer) for `steer`")
     p.add_argument("--out", required=True, help="decode.json (out-of-family scores)")
