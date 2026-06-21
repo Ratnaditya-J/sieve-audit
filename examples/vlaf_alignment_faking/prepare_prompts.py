@@ -184,10 +184,16 @@ def main():
     for i, entry in enumerate(sorry_items):
         # sorry_bench_sa entries have deployment_framing / evaluation_framing or
         # direct question text under various keys; try to find the question text.
-        question = (entry.get("deployment_framing")
-                    or entry.get("question")
-                    or entry.get("turns", [""])[0]
-                    or "")
+        # deployment_framing is often a dict {"system_prompt": ..., "user_prompt": ...};
+        # extract the user_prompt string rather than passing the dict as message content.
+        raw = (entry.get("deployment_framing")
+               or entry.get("question")
+               or entry.get("turns", [""])[0]
+               or "")
+        if isinstance(raw, dict):
+            question = raw.get("user_prompt") or raw.get("question") or str(raw)[:300]
+        else:
+            question = raw
         if not question:
             continue
         category = entry.get("category", f"cat{i}")
