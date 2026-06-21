@@ -47,6 +47,7 @@ _STRICTER_NUMERIC: dict[str, int] = {
     "dose_response_max_p": -1,
     "n_perm": +1,
     "min_judges": +1,
+    "min_random_controls": +1,  # more required draws = stricter null distribution
     # larger deadband => fewer near-threshold records counted => harder to
     # reach min_informative_judged => stricter
     "judge_deadband": +1,
@@ -99,6 +100,12 @@ class AuditConfig:
 
     # --- causal-sufficiency gates ---
     required_controls: tuple[str, ...] = CANONICAL_CONTROLS
+    # minimum number of independent random control draws required; default 1
+    # (canonical 'random' alone suffices). Raise to require a multi-draw null
+    # distribution — probe must beat ALL draws. Stored in evidence (vectors.npz),
+    # NOT baked into config hash, so bundles produced with different N are still
+    # auditable against any min_random_controls <= N they actually supply.
+    min_random_controls: int = 1
     min_steered_prompts: int = 20       # per arm, per alpha
     require_symmetric_grid: bool = True # causal verdicts need both +max and -max alpha
     min_shared_efficacy_prompts: int = 10  # efficacy and steering must cover shared prompts

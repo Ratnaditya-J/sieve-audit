@@ -277,6 +277,17 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
     if PROBE_ARM not in arms:
         raise ValueError("steering records contain no 'probe' arm")
 
+    # Multi-draw null count check: count all random draws present (canonical + extras)
+    all_random_arms = [a for a in arms if a == "random" or a.startswith("random_")]
+    n_random_total = len(all_random_arms)
+    if n_random_total < cfg.min_random_controls:
+        violations.append(
+            f"multi-draw null requires {cfg.min_random_controls} random control draws "
+            f"but only {n_random_total} present "
+            f"({', '.join(all_random_arms) if all_random_arms else 'none'}); "
+            "supply random_1, random_2, ... arms or lower min_random_controls"
+        )
+
     deltas = _paired_deltas(records)
     if PROBE_ARM not in deltas:
         raise ValueError("probe arm has no alpha=0 records: deltas cannot be paired")

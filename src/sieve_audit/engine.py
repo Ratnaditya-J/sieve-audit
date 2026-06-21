@@ -130,6 +130,25 @@ def _cross_stage_gaps(
                 f"control arm {control!r} applied no real perturbation "
                 "(zero-norm direction or dead hook): degenerate control"
             )
+    # extra random arms (random_1, random_2, ...) must also be live; they are
+    # compared against the probe in controls.py so a dead extra-random arm could
+    # silently flatter the probe just like a dead canonical control would
+    extra_random = sorted(
+        a for a in controls.arms
+        if a.startswith("random_") and a not in cfg.required_controls
+    )
+    for arm in extra_random:
+        ctrl_eff = efficacy.get(arm)
+        if ctrl_eff is None:
+            gaps.append(
+                f"control arm {arm!r} has no efficacy records: a degenerate "
+                "control would make any probe look superior"
+            )
+        elif not ctrl_eff.injection_verified:
+            gaps.append(
+                f"control arm {arm!r} applied no real perturbation "
+                "(zero-norm direction or dead hook): degenerate control"
+            )
     return gaps
 
 
