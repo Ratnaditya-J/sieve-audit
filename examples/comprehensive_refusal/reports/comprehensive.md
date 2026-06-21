@@ -1,6 +1,6 @@
 # SIEVE audit card — `surface_confounded · necessary`
 
-> **Verdict: surface_confounded · necessary** — under single-layer additive steering, ablation, joint multi-layer ablation (layers [12, 14, 16]) (protocol v0.1, config `b37c11511c6adebfac42fe14ce1b07a05d57ac623e4962a7bc0caa0b2ff6af74`, bundle `3b4d463e650534be89967af58f6657d619471da41a876829bb1d1b0c79fa204d`)
+> **Verdict: surface_confounded · necessary** — under single-layer additive steering, ablation, joint multi-layer ablation (layers [12, 14, 16]) (protocol v0.1, config `b37c11511c6adebfac42fe14ce1b07a05d57ac623e4962a7bc0caa0b2ff6af74`, bundle `5ced3ec519415a5001ddc095f5aa48d00477175692b26e5081565b03d53fbab4`)
 >
 > **Tested intervention(s):** single-layer additive steering, ablation, joint multi-layer ablation (layers [12, 14, 16])  ·  causal verdicts are bounded to these
 >
@@ -10,12 +10,12 @@
 
 - **Model:** Qwen/Qwen2.5-1.5B-Instruct
 - **Layer(s):** [14]
-- **Direction:** contrastive mean-diff (z-scored, last-token), refusal direction
-- **Prompts:** AdvBench harmful vs templated benign instructions (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120)
+- **Direction:** contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out
+- **Prompts:** AdvBench harmful vs templated benign instructions (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120) (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120, n=120)
 - **Alpha grid:** [-0.2, -0.1, 0.0, 0.1, 0.2]
 - **Behavioral metric(s):** refusal
 - **Judges:** openai:gpt-4.1-mini, openai:gpt-4o-mini
-- **Steering arms:** orthogonal, probe, random, wrong_layer
+- **Steering arms:** orthogonal, probe, random, random_1, random_2, wrong_layer
 - **Seed:** 0
 
 ## Diagnostics
@@ -26,18 +26,24 @@
 - Control-arm movement (orthogonal): **passed** (hook_correct=True, median rel. residual delta @|α|=0.2: 0.2002, output changed: True)
 - Efficacy gate (probe): **passed** (hook_correct=True, median rel. residual delta @|α|=0.2: 0.2002, output changed: True)
 - Control-arm movement (random): **passed** (hook_correct=True, median rel. residual delta @|α|=0.2: 0.2002, output changed: True)
-- Control-arm movement (wrong_layer): **passed** (hook_correct=True, median rel. residual delta @|α|=0.2: 0.2002, output changed: True)
-- Dose-response: rho=0.72 (p=0.0010); judge agreement: spearman=0.59, kappa=0.62
-- |probe| − |random| @α=-0.2: 0.526 [0.310, 0.717]
-- |probe| − |orthogonal| @α=-0.2: 0.416 [0.179, 0.627]
-- |probe| − |wrong_layer| @α=-0.2: 0.277 [0.106, 0.437]
-- |probe| − |random| @α=0.2: -0.251 [-0.380, -0.129]
-- |probe| − |orthogonal| @α=0.2: -0.374 [-0.533, -0.216]
-- |probe| − |wrong_layer| @α=0.2: 0.027 [-0.015, 0.086]
-- Necessity (ablation): NECESSARY (probe-ablation drop 0.330 [0.187, 0.479]; vs ablate_random 0.330 [0.187, 0.491])
-- Multi-layer ablation (joint layers [12, 14, 16]): NECESSARY (joint) (joint-ablation drop 0.517 [0.375, 0.677]; vs ablate_random 0.539 [0.397, 0.680])
+- Control-arm movement (random_1): **passed** (hook_correct=True, median rel. residual delta @|α|=0.2: 0.2002, output changed: True)
+- Control-arm movement (random_2): **passed** (hook_correct=True, median rel. residual delta @|α|=0.2: 0.2002, output changed: True)
+- Control-arm movement (wrong_layer): **passed** (hook_correct=True, median rel. residual delta @|α|=0.2: 0.2000, output changed: True)
+- Dose-response: rho=0.62 (p=0.0010); judge agreement: spearman=0.62, kappa=0.71
+- |probe| − |random| @α=-0.2: 0.483 [0.329, 0.643]
+- |probe| − |orthogonal| @α=-0.2: 0.285 [0.120, 0.449]
+- |probe| − |wrong_layer| @α=-0.2: 0.193 [-0.022, 0.407]
+- |probe| − |random_1| @α=-0.2: 0.318 [0.118, 0.513]
+- |probe| − |random_2| @α=-0.2: 0.178 [-0.035, 0.381]
+- |probe| − |random| @α=0.2: -0.305 [-0.454, -0.177]
+- |probe| − |orthogonal| @α=0.2: -0.332 [-0.502, -0.178]
+- |probe| − |wrong_layer| @α=0.2: -0.010 [-0.026, 0.000]
+- |probe| − |random_1| @α=0.2: -0.508 [-0.660, -0.362]
+- |probe| − |random_2| @α=0.2: 0.000 [-0.005, 0.004]
+- Necessity (ablation): NECESSARY (probe-ablation drop 0.146 [0.045, 0.267]; vs ablate_random 0.144 [0.040, 0.271])
+- Multi-layer ablation (joint layers [12, 14, 16]): NECESSARY (joint) (joint-ablation drop 0.536 [0.411, 0.666]; vs ablate_random 0.537 [0.405, 0.659])
 - Oracle (patching, layers [14]): inconclusive — full-site patch does not significantly restore behavior: the site carries no measurable causal content, so the direction cannot be calibrated against it
-- **Causal summary:** sufficiency=untested, necessity=necessary, multilayer=necessary_joint, oracle=inconclusive → single-method evidence only (sufficiency=untested, necessity=necessary); cross-method agreement not established
+- **Causal summary:** sufficiency=untested, necessity=necessary, multilayer=necessary_joint, oracle=inconclusive → DIRECTION IS CAUSALLY NECESSARY (ablation) but the probe is surface-confounded at the decodability stage: the direction is a load-bearing intervention coordinate — ablating it degrades the behavior — but its scores are explained by surface text statistics and it is NOT licensed as a deployment signal detector. Causal involvement ≠ valid monitor.
 
 ### Decision reasons
 
@@ -68,7 +74,7 @@ _ROC curves: see the `*.roc.svg` chart and `*.html` / `*.pdf` report written alo
 
 ## Allowed claims (scope-bound; do not detach)
 
-- Under [model=Qwen/Qwen2.5-1.5B-Instruct, layer(s)=14, direction=contrastive mean-diff (z-scored, last-token), refusal direction, prompts=AdvBench harmful vs templated benign instructions, metrics=refusal, single-layer additive steering], the signal is decodable but matched by a surface (text-statistics) baseline; no activation-level claim is warranted.
+- Under [model=Qwen/Qwen2.5-1.5B-Instruct, layer(s)=14, direction=contrastive mean-diff (z-scored, last-token), refusal direction, leave-one-family-out, prompts=AdvBench harmful vs templated benign instructions (license: AdvBench prompts (llm-attacks, MIT); benign templates CC0, n=120), metrics=refusal, single-layer additive steering/ablation/multilayer ablation/activation patching], the signal is decodable but matched by a surface (text-statistics) baseline; no activation-level claim is warranted.
 - Under ablation, the signal IS necessary: removing it degrades the behavior more than an ablate_random control. A not_causally_sufficient verdict here is consistent with a distributed/multi-layer mechanism that single-layer additive steering cannot induce — the signal is NOT causally inert.
 - Under joint ablation across layers [12, 14, 16], the signal is necessary: removing it jointly degrades the behavior more than an ablate_random control — consistent with the single-layer necessity finding.
 
@@ -81,10 +87,12 @@ _ROC curves: see the `*.roc.svg` chart and `*.html` / `*.pdf` report written alo
 
 ## Residual risks
 
-- Single-layer additive steering only; distributed/multi-layer mechanisms untested.
-- Sufficiency-style evidence only; necessity (ablation) untested.
+- Sufficiency evidence uses single-layer additive steering; other intervention forms may still reveal different causal behavior.
+- Necessity was tested by directional ablation under the audited scope; other ablation methods and prompt distributions may differ.
+- Joint multi-layer ablation tested layer set [12, 14, 16]; other layer sets and distributed mechanisms remain outside scope.
 - Results are specific to the audited prompt distribution and may not transfer.
 - Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed.
+- multi-draw null: 3 random control draws present (random, random_1, random_2); probe must beat ALL of them
 - Oracle (patching) calibration evidence was provided but could not be adjudicated: full-site patch does not significantly restore behavior: the site carries no measurable causal content, so the direction cannot be calibrated against it
 
 ## Protocol config
@@ -94,5 +102,5 @@ _ROC curves: see the `*.roc.svg` chart and `*.html` / `*.pdf` report written alo
 
 ## Reproducibility
 
-- Protocol: v0.1; config hash `b37c11511c6adebfac42fe14ce1b07a05d57ac623e4962a7bc0caa0b2ff6af74`; bundle hash `3b4d463e650534be89967af58f6657d619471da41a876829bb1d1b0c79fa204d`
-- Re-run: `sieve audit --bundle /tmp/sieve_run/out/bundle_all.json --seed 0`
+- Protocol: v0.1; config hash `b37c11511c6adebfac42fe14ce1b07a05d57ac623e4962a7bc0caa0b2ff6af74`; bundle hash `5ced3ec519415a5001ddc095f5aa48d00477175692b26e5081565b03d53fbab4`
+- Re-run: `sieve audit --bundle examples/comprehensive_refusal/bundle_all.json --seed 0`

@@ -88,6 +88,15 @@ def _get_layer_module(model, layer_idx: int):
     return layers[layer_idx]
 
 
+def _n_layers(model) -> int:
+    """Total transformer block count for the loaded model."""
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        return len(model.model.layers)
+    if hasattr(model, "transformer") and hasattr(model.transformer, "h"):
+        return len(model.transformer.h)
+    raise SystemExit("cannot count transformer layers; extend _n_layers")
+
+
 class SteeringHook:
     """Adds a scaled `direction` to the block output at every PREFILL position;
     no-op during decode (the KV cache carries the effect). Records the
@@ -352,6 +361,31 @@ def _hidden_at_layer(model, tokenizer, text: str, layer: int, pool: str = "last"
     return captured["h"].numpy()
 
 
+def _hidden_at_all_layers(model, tokenizer, text: str,
+                           layer_indices: list[int], pool: str = "last") -> dict[int, "np.ndarray"]:
+    """Single forward pass capturing activations at every layer in layer_indices.
+    Returns {layer_idx: activation_vector}. Much cheaper than one pass per layer."""
+    import torch
+
+    captured: dict[int, "torch.Tensor"] = {}
+    handles = []
+    for idx in layer_indices:
+        def _make_grab(i):
+            def grab(module, _args, output):
+                hidden = output[0] if isinstance(output, tuple) else output
+                h = hidden[0, -1] if pool == "last" else hidden[0].mean(dim=0)
+                captured[i] = h.float().detach().cpu()
+            return grab
+        handles.append(_get_layer_module(model, idx).register_forward_hook(_make_grab(idx)))
+    try:
+        with torch.no_grad():
+            model(_encode(tokenizer, text, _input_device(model)))
+    finally:
+        for h in handles:
+            h.remove()
+    return {idx: captured[idx].numpy() for idx in layer_indices}
+
+
 # ---------------------------------------------------------------------------
 # prompts I/O
 # ---------------------------------------------------------------------------
@@ -387,15 +421,95 @@ def _probe_direction(X, y):
     return w / np.linalg.norm(w), mu, sd
 
 
-def _control_directions(w, seed):
-    """random + orthogonal control directions for a given probe direction."""
+def _control_directions(w, seed, n_random: int = 1):
+    """Return (random_dirs, orthogonal) where random_dirs is a list of n_random
+    independent unit vectors. n_random > 1 gives a multi-draw null so the probe
+    must beat every draw, not just one lucky sample."""
     rng = np.random.default_rng(seed)
-    r = rng.normal(size=w.shape)
-    random_dir = r / np.linalg.norm(r)
+    random_dirs = []
+    for _ in range(max(1, n_random)):
+        r = rng.normal(size=w.shape)
+        random_dirs.append(r / np.linalg.norm(r))
     r2 = rng.normal(size=w.shape)
     orth = r2 - (r2 @ w) * w
     orth = orth / np.linalg.norm(orth)
-    return random_dir, orth
+    return random_dirs, orth
+
+
+def _auto_select_layer(model, tokenizer, prompts: list[dict],
+                       pool: str, seed: int,
+                       candidates: list[int] | None = None) -> tuple[int, dict[int, float]]:
+    """Sweep candidate layers with LOFO AUROC; return (best_layer, {layer: auroc}).
+
+    One forward pass per prompt captures all candidate layers simultaneously,
+    so cost is O(n_prompts) not O(n_layers * n_prompts).
+
+    Default candidate range: middle 50% of model depth (25%–75%). Early layers
+    encode syntax, late layers encode output formatting; semantic directions live
+    in between."""
+    from ..stats import auroc as _auroc
+
+    n = _n_layers(model)
+    if candidates is None:
+        lo, hi = max(1, n // 4), max(2, 3 * n // 4)
+        candidates = list(range(lo, hi))
+
+    print(f"[auto-layer] sweeping {len(candidates)} candidate layers "
+          f"({candidates[0]}–{candidates[-1]}) across {len(prompts)} prompts "
+          f"(pool={pool})")
+
+    all_acts: dict[int, list] = {idx: [] for idx in candidates}
+    for i, p in enumerate(prompts):
+        row = _hidden_at_all_layers(model, tokenizer, p["text"], candidates, pool)
+        for idx in candidates:
+            all_acts[idx].append(row[idx])
+        if (i + 1) % 25 == 0:
+            print(f"  {i + 1}/{len(prompts)}")
+
+    y = np.array([int(p["label"]) for p in prompts])
+    fams = np.array([str(p["family"]) for p in prompts])
+    uniq = sorted(set(fams.tolist()))
+
+    aurocs: dict[int, float] = {}
+    for idx in candidates:
+        X = np.stack(all_acts[idx])
+        scores = np.full(len(y), np.nan)
+        for f in uniq:
+            te = fams == f
+            tr = ~te
+            if len(set(y[tr].tolist())) < 2:
+                continue
+            w_f, _, _ = _probe_direction(X[tr], y[tr])
+            scores[te] = X[te] @ w_f
+        if np.isnan(scores).any():
+            continue
+        aurocs[idx] = _auroc(y, scores)
+
+    if not aurocs:
+        raise SystemExit("[auto-layer] no valid AUROC computed; check that "
+                         "prompts have 'label' and 'family' fields")
+
+    best = max(aurocs, key=aurocs.__getitem__)
+    sweep_str = ", ".join(f"L{k}={v:.3f}" for k, v in sorted(aurocs.items()))
+    print(f"[auto-layer] selected layer {best} "
+          f"(AUROC {aurocs[best]:.3f}); sweep: {sweep_str}")
+    return best, aurocs
+
+
+def _resolve_layer(args, vectors_path: "Path | None" = None) -> int:
+    """Return the layer to use: explicit --layer wins; else read from vectors.npz."""
+    if getattr(args, "layer", None) is not None:
+        return args.layer
+    if vectors_path is not None and Path(vectors_path).exists():
+        sv = np.load(vectors_path)
+        if "selected_layer" in sv:
+            layer = int(sv["selected_layer"])
+            print(f"[layer] using auto-selected layer {layer} from {vectors_path}")
+            return layer
+    raise SystemExit(
+        "--layer is required (or run decode-lofo without --layer to auto-select "
+        "and embed the choice in vectors.npz)"
+    )
 
 
 def cmd_vectors(args) -> int:
@@ -415,14 +529,21 @@ def cmd_vectors(args) -> int:
     y = np.array(labels)
 
     w, mu, sd = _probe_direction(X, y)
-    random_dir, orth = _control_directions(w, args.seed)
+    n_random = getattr(args, "n_random_controls", 1)
+    random_dirs, orth = _control_directions(w, args.seed, n_random)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(out, probe=w.astype(np.float32), random=random_dir.astype(np.float32),
+    extra = {f"random_{i}": random_dirs[i].astype(np.float32)
+             for i in range(1, len(random_dirs))}
+    np.savez(out, probe=w.astype(np.float32),
+             random=random_dirs[0].astype(np.float32),  # arm "random" for backward compat
              orthogonal=orth.astype(np.float32),
-             zscore_mu=mu.astype(np.float32), zscore_sd=sd.astype(np.float32))
-    print(f"[vectors] probe/random/orthogonal (unit norm, d={len(w)}) -> {out}")
+             zscore_mu=mu.astype(np.float32), zscore_sd=sd.astype(np.float32),
+             selected_layer=np.array(args.layer, dtype=np.int32),
+             n_random_controls=np.array(n_random, dtype=np.int32),
+             **extra)
+    print(f"[vectors] probe/{n_random} random/orthogonal (unit norm, d={len(w)}) -> {out}")
     return 0
 
 
@@ -435,14 +556,15 @@ def cmd_decode(args) -> int:
     model, tokenizer = _load_model(args)
     sv = np.load(args.vectors)
     w = sv["probe"]
+    layer = _resolve_layer(args, args.vectors)
     prompts = _load_labeled_prompts(args.holdout_prompts)
     if any("label" not in p or "family" not in p for p in prompts):
         raise SystemExit("holdout prompts need 'label' and 'family' fields")
 
-    print(f"[decode] scoring {len(prompts)} holdout prompts at layer {args.layer}")
+    print(f"[decode] scoring {len(prompts)} holdout prompts at layer {layer}")
     records = []
     for i, p in enumerate(prompts):
-        h = _hidden_at_layer(model, tokenizer, p["text"], args.layer,
+        h = _hidden_at_layer(model, tokenizer, p["text"], layer,
                              pool=args.pool)
         records.append({
             "prompt_id": p.get("prompt_id", f"h{i}"),
@@ -470,27 +592,42 @@ def cmd_decode_lofo(args) -> int:
     baselines face inside the engine — no train/test leakage, every probe
     score is genuinely out-of-family (so --attest-out-of-sample is truthful).
     Also saves the full-data direction (+ controls) to --save-vectors for the
-    steering stage, which needs a single canonical direction to inject."""
+    steering stage, which needs a single canonical direction to inject.
+
+    If --layer is omitted, sweeps candidate layers (middle 50% of model depth by
+    default, or --layer-candidates) and picks the one with the highest LOFO AUROC.
+    The selected layer is embedded in --save-vectors so downstream commands can
+    resolve it automatically."""
     model, tokenizer = _load_model(args)
     prompts = _load_labeled_prompts(args.holdout_prompts)
     if any("label" not in p or "family" not in p for p in prompts):
         raise SystemExit("holdout prompts need 'label' and 'family' fields")
 
-    print(f"[decode-lofo] extracting layer-{args.layer} activations for "
+    fams = np.array([str(p["family"]) for p in prompts])
+    if len(set(fams.tolist())) < 2:
+        raise SystemExit("decode-lofo needs >= 2 families; use plain `decode` "
+                         "with a separate --vectors direction instead")
+
+    # --- auto-select layer if not specified ---
+    if args.layer is None:
+        candidates = getattr(args, "layer_candidates", None)
+        layer, _ = _auto_select_layer(model, tokenizer, prompts,
+                                       pool=args.pool, seed=args.seed,
+                                       candidates=candidates)
+    else:
+        layer = args.layer
+
+    print(f"[decode-lofo] extracting layer-{layer} activations for "
           f"{len(prompts)} holdout prompts (pool={args.pool})")
     acts = []
     for i, p in enumerate(prompts):
-        acts.append(_hidden_at_layer(model, tokenizer, p["text"], args.layer,
+        acts.append(_hidden_at_layer(model, tokenizer, p["text"], layer,
                                      pool=args.pool))
         if (i + 1) % 25 == 0:
             print(f"  {i + 1}/{len(prompts)}")
     X = np.stack(acts)
     y = np.array([int(p["label"]) for p in prompts])
-    fams = np.array([str(p["family"]) for p in prompts])
     uniq = sorted(set(fams.tolist()))
-    if len(uniq) < 2:
-        raise SystemExit("decode-lofo needs >= 2 families; use plain `decode` "
-                         "with a separate --vectors direction instead")
 
     # per-family out-of-fold projection
     scores = np.full(len(y), np.nan)
@@ -515,15 +652,23 @@ def cmd_decode_lofo(args) -> int:
     print(f"[decode-lofo] {len(uniq)} folds ({','.join(uniq)}) -> {args.out}  "
           "(every score is out-of-family)")
 
-    # full-data canonical direction for the steering stage
+    # full-data canonical direction for the steering stage; embed selected_layer
+    # and n_random_controls so downstream commands can resolve both without flags
     w, mu, sd = _probe_direction(X, y)
-    random_dir, orth = _control_directions(w, args.seed)
+    n_random = getattr(args, "n_random_controls", 1)
+    random_dirs, orth = _control_directions(w, args.seed, n_random)
     sv = Path(args.save_vectors)
     sv.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(sv, probe=w.astype(np.float32), random=random_dir.astype(np.float32),
+    extra = {f"random_{i}": random_dirs[i].astype(np.float32)
+             for i in range(1, len(random_dirs))}
+    np.savez(sv, probe=w.astype(np.float32),
+             random=random_dirs[0].astype(np.float32),
              orthogonal=orth.astype(np.float32),
-             zscore_mu=mu.astype(np.float32), zscore_sd=sd.astype(np.float32))
-    print(f"[decode-lofo] full-data direction (+controls) -> {sv}")
+             zscore_mu=mu.astype(np.float32), zscore_sd=sd.astype(np.float32),
+             selected_layer=np.array(layer, dtype=np.int32),
+             n_random_controls=np.array(n_random, dtype=np.int32),
+             **extra)
+    print(f"[decode-lofo] full-data direction (+controls), layer={layer} -> {sv}")
     return 0
 
 
@@ -537,14 +682,28 @@ def cmd_steer(args) -> int:
 
     model, tokenizer = _load_model(args)
     sv = np.load(args.vectors)
+    layer = _resolve_layer(args, args.vectors)
+    wrong_layer = (args.wrong_layer if args.wrong_layer is not None
+                   else max(0, layer // 2))
+    if args.wrong_layer is None:
+        print(f"[steer] --wrong-layer not set; defaulting to layer {wrong_layer} "
+              f"(half of selected layer {layer})")
+
+    # Build dynamic arm set from vectors.npz so n_random_controls > 1 is transparent
+    n_random = int(sv["n_random_controls"]) if "n_random_controls" in sv else 1
+    random_arms = ["random"] + [f"random_{i}" for i in range(1, n_random)]
+    arms_dynamic = ("probe",) + tuple(random_arms) + ("orthogonal", "wrong_layer")
     directions = {
         "probe": sv["probe"],
-        "random": sv["random"],
         "orthogonal": sv["orthogonal"],
-        "wrong_layer": sv["probe"],  # same vector, injected at --wrong-layer
+        "wrong_layer": sv["probe"],  # same direction, injected at wrong_layer
+        **{arm: sv["random" if i == 0 else f"random_{i}"]
+           for i, arm in enumerate(random_arms)},
     }
-    arm_layers = {arm: (args.wrong_layer if arm == "wrong_layer" else args.layer)
-                  for arm in ARMS}
+    if n_random > 1:
+        print(f"[steer] {n_random} random control draws (multi-draw null)")
+    arm_layers = {arm: (wrong_layer if arm == "wrong_layer" else layer)
+                  for arm in arms_dynamic}
     prompts = _load_labeled_prompts(args.steer_prompts)
     # Grid units depend on the scaling mode. Relative alphas read as target
     # fractional residual movement (0.2 -> ~20%), so a small symmetric grid
@@ -559,29 +718,29 @@ def cmd_steer(args) -> int:
               "the audit will refuse a causal verdict")
 
     if args.test:
-        _run_correctness_tests(model, tokenizer, directions["probe"], args.layer)
+        _run_correctness_tests(model, tokenizer, directions["probe"], layer)
         return 0
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    n_total = len(prompts) * len(ARMS) * len(alphas)
-    print(f"[steer] {len(prompts)} prompts x {len(ARMS)} arms x "
+    n_total = len(prompts) * len(arms_dynamic) * len(alphas)
+    print(f"[steer] {len(prompts)} prompts x {len(arms_dynamic)} arms x "
           f"{len(alphas)} alphas = {n_total} generations")
 
     baselines: dict[tuple[str, str], str] = {}
     t0 = time.time()
     done = 0
     with out.open("w") as fout:
-        for arm in ARMS:
+        for arm in arms_dynamic:
             w = torch.from_numpy(directions[arm]).to(_input_device(model))
-            layer = arm_layers[arm]
+            arm_layer = arm_layers[arm]
             for alpha in alphas:
                 for p in prompts:
                     pid = p.get("prompt_id", p.get("id", "p?"))
                     hook = SteeringHook(w, alpha,
                                         relative=args.alpha_mode == "relative")
                     text = _generate(model, tokenizer, p["text"], hook,
-                                     layer, args.max_new_tokens)
+                                     arm_layer, args.max_new_tokens)
                     if alpha == 0.0:
                         baselines[(arm, pid)] = text
                     base = baselines.get((arm, pid))
@@ -594,7 +753,7 @@ def cmd_steer(args) -> int:
                         "arm": arm,
                         "alpha": alpha,
                         "prompt_id": pid,
-                        "layer": layer,
+                        "layer": arm_layer,
                         "alpha_mode": args.alpha_mode,
                         "generated_text": text,
                         "resid_base_norm": hook.base_norm,
@@ -866,6 +1025,14 @@ def cmd_bundle(args) -> int:
     steer_rows = [json.loads(l) for l in Path(args.steer).read_text().splitlines() if l.strip()]
     judged_rows = [json.loads(l) for l in Path(args.judged).read_text().splitlines() if l.strip()]
 
+    # resolve layer: explicit --layer wins; else infer from the first steer row
+    if args.layer is None:
+        probe_rows = [r for r in steer_rows if r.get("arm") == "probe"]
+        if not probe_rows:
+            raise SystemExit("--layer is required (no 'probe' arm rows found to infer it from)")
+        args.layer = int(probe_rows[0]["layer"])
+        print(f"[bundle] inferred layer={args.layer} from steer records")
+
     decodability = DecodabilityEvidence(
         texts=[r["text"] for r in decode_records],
         labels=[r["label"] for r in decode_records],
@@ -1003,6 +1170,7 @@ def cmd_ablate(args) -> int:
 
     model, tokenizer = _load_model(args)
     sv = np.load(args.vectors)
+    layer = _resolve_layer(args, args.vectors)
     dirs = {
         "probe": sv["probe"] / (np.linalg.norm(sv["probe"]) + 1e-12),
         "ablate_random": sv["random"] / (np.linalg.norm(sv["random"]) + 1e-12),
@@ -1010,7 +1178,7 @@ def cmd_ablate(args) -> int:
     prompts = _load_labeled_prompts(args.eval_prompts)
 
     if args.test:
-        _run_ablation_tests(model, tokenizer, dirs["probe"], args.layer)
+        _run_ablation_tests(model, tokenizer, dirs["probe"], layer)
         return 0
 
     out = Path(args.out)
@@ -1027,11 +1195,11 @@ def cmd_ablate(args) -> int:
                 hook = AblationHook(w)
             for p in prompts:
                 pid = p.get("prompt_id", p.get("id", "p?"))
-                text = _generate(model, tokenizer, p["text"], hook, args.layer,
+                text = _generate(model, tokenizer, p["text"], hook, layer,
                                  args.max_new_tokens)
                 fout.write(json.dumps({
                     "arm": arm, "alpha": 0.0, "prompt_id": pid,
-                    "layer": args.layer, "generated_text": text,
+                    "layer": layer, "generated_text": text,
                     "removed_norm": (hook.removed_norm if hook else 0.0),
                 }) + "\n")
                 fout.flush()
@@ -1068,6 +1236,15 @@ def cmd_bundle_ablation(args) -> int:
     """Assemble an ablation-only EvidenceBundle (the necessity gate runs on it;
     attach to a steering bundle, or audit on its own for a necessity verdict)."""
     judged = [json.loads(l) for l in Path(args.judged).read_text().splitlines() if l.strip()]
+
+    # infer layer from records if not specified
+    if args.layer is None:
+        probe_rows = [r for r in judged if r.get("arm") == "ablate_probe"]
+        if not probe_rows:
+            raise SystemExit("--layer is required (no 'ablate_probe' rows found to infer it from)")
+        args.layer = int(probe_rows[0].get("layer", probe_rows[0].get("layers", [None])[0]))
+        print(f"[bundle-ablation] inferred layer={args.layer} from ablation records")
+
     ablation = [
         AblationRecord(
             arm=r["arm"],
@@ -1175,10 +1352,11 @@ def cmd_patching(args) -> int:
         raise SystemExit("patching prompts need 'clean_text' and 'corrupt_text'")
 
     out = Path(args.out)
+    layer = _resolve_layer(args, args.vectors)
     out.parent.mkdir(parents=True, exist_ok=True)
     arms = ["clean", "corrupt", "patch_full", "patch_direction", "patch_random"]
     n_total = len(prompts) * len(arms)
-    print(f"[patching] site layer {args.layer}: {len(prompts)} pairs x "
+    print(f"[patching] site layer {layer}: {len(prompts)} pairs x "
           f"{len(arms)} arms = {n_total} generations")
     done = 0
     with out.open("w") as fout:
@@ -1186,17 +1364,17 @@ def cmd_patching(args) -> int:
             pid = p.get("prompt_id", "p?")
             # oracle source: the clean decision-point residual at the site
             clean_resid = torch.from_numpy(
-                _hidden_at_layer(model, tokenizer, p["clean_text"], args.layer,
+                _hidden_at_layer(model, tokenizer, p["clean_text"], layer,
                                  pool="last")
             ).to(_input_device(model))
             for arm in arms:
                 if arm == "clean":
                     text = _generate(model, tokenizer, p["clean_text"], None,
-                                     args.layer, args.max_new_tokens)
+                                     layer, args.max_new_tokens)
                     applied = None
                 elif arm == "corrupt":
                     text = _generate(model, tokenizer, p["corrupt_text"], None,
-                                     args.layer, args.max_new_tokens)
+                                     layer, args.max_new_tokens)
                     applied = None
                 else:
                     mode = {"patch_full": "full", "patch_direction": "direction",
@@ -1206,11 +1384,11 @@ def cmd_patching(args) -> int:
                     hook = PatchHook(mode, clean_resid, direction)
                     text = _generate_with_hooks(
                         model, tokenizer, p["corrupt_text"],
-                        [(hook, args.layer)], args.max_new_tokens)
+                        [(hook, layer)], args.max_new_tokens)
                     applied = hook.applied_norm
                 fout.write(json.dumps({
                     "arm": arm, "alpha": 0.0, "prompt_id": pid,
-                    "layers": [args.layer], "generated_text": text,
+                    "layers": [layer], "generated_text": text,
                     "applied_norm": applied,
                 }) + "\n")
                 fout.flush()
@@ -1243,17 +1421,18 @@ def cmd_leakage(args) -> int:
     model, tokenizer = _load_model(args)
     sv = np.load(args.vectors)
     w = sv["probe"]
+    layer = _resolve_layer(args, args.vectors)
     prompts = _load_labeled_prompts(args.holdout_prompts)
     if any("label" not in p for p in prompts):
         raise SystemExit("leakage prompts need a 'label' field")
     rng = np.random.default_rng(args.seed)
 
     def score(text: str) -> float:
-        return float(_hidden_at_layer(model, tokenizer, text, args.layer,
+        return float(_hidden_at_layer(model, tokenizer, text, layer,
                                       pool=args.pool) @ w)
 
     print(f"[leakage] re-scoring {len(prompts)} holdout prompts (full / "
-          f"leak-removed / random-removed) at layer {args.layer}")
+          f"leak-removed / random-removed) at layer {layer}")
     records = []
     for i, p in enumerate(prompts):
         text = p["text"]
@@ -1287,19 +1466,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    def add_model_args(p):
+    def add_model_args(p, layer_required=False):
         p.add_argument("--model", required=True, help="HF id or local path")
-        p.add_argument("--layer", type=int, required=True)
+        p.add_argument("--layer", type=int,
+                       required=layer_required, default=None,
+                       help="transformer layer index; omit with decode-lofo to "
+                            "auto-select the best layer by LOFO AUROC sweep; "
+                            "downstream commands read the choice from vectors.npz")
         p.add_argument("--dtype", default="bfloat16",
                        choices=["float16", "bfloat16", "float32"])
 
     p = sub.add_parser("vectors", help="build probe/random/orthogonal directions")
-    add_model_args(p)
+    add_model_args(p, layer_required=True)  # vectors always needs an explicit layer
     p.add_argument("--contrast-prompts", type=Path, required=True,
                    help="JSONL: {prompt_id, text, label} contrast set")
     p.add_argument("--pool", choices=["last", "mean"], default="last",
                    help="activation pooling; MUST match the decode --pool")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--n-random-controls", type=int, default=3, dest="n_random_controls",
+                   help="number of independent random control draws (multi-draw null); "
+                        "default 3 — probe must beat ALL of them")
     p.add_argument("--out", required=True, help=".npz output")
     p.set_defaults(func=cmd_vectors)
 
@@ -1315,7 +1501,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("decode-lofo",
                        help="leave-one-family-out direction + projection "
-                            "(fair probe-vs-baseline; no separate vectors step)")
+                            "(fair probe-vs-baseline; no separate vectors step). "
+                            "Omit --layer to auto-select by AUROC sweep.")
     add_model_args(p)
     p.add_argument("--holdout-prompts", type=Path, required=True,
                    help="JSONL: {prompt_id, text, label, family}; serves as "
@@ -1323,16 +1510,23 @@ def main(argv: list[str] | None = None) -> int:
                         "leave-one-family-out")
     p.add_argument("--pool", choices=["last", "mean"], default="last")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--n-random-controls", type=int, default=3, dest="n_random_controls",
+                   help="number of independent random control draws (multi-draw null); "
+                        "default 3 — probe must beat ALL of them")
+    p.add_argument("--layer-candidates", type=int, nargs="+", default=None,
+                   help="explicit list of layers to sweep when --layer is omitted; "
+                        "default: middle 50%% of model depth (25%%–75%%)")
     p.add_argument("--save-vectors", required=True,
-                   help=".npz: full-data direction (+controls) for `steer`")
+                   help=".npz: full-data direction (+controls, +selected_layer) for `steer`")
     p.add_argument("--out", required=True, help="decode.json (out-of-family scores)")
     p.set_defaults(func=cmd_decode_lofo)
 
     p = sub.add_parser("steer", help="steered generations + efficacy records")
     add_model_args(p)
     p.add_argument("--vectors", type=Path, required=True)
-    p.add_argument("--wrong-layer", type=int, required=True,
-                   help="control layer for the wrong_layer arm")
+    p.add_argument("--wrong-layer", type=int, default=None,
+                   help="control layer for the wrong_layer arm; defaults to "
+                        "half the probe layer (auto-selected or explicit)")
     p.add_argument("--steer-prompts", type=Path, required=True)
     p.add_argument("--alpha-mode", choices=["relative", "absolute"],
                    default="relative",
@@ -1383,7 +1577,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="name of the off-distribution eval set")
     p.add_argument("--model", required=True)
     p.add_argument("--revision", default=None)
-    p.add_argument("--layer", type=int, required=True)
+    p.add_argument("--layer", type=int, default=None,
+                   help="probe layer; inferred from steer records if omitted")
     p.add_argument("--direction-source", required=True)
     p.add_argument("--prompt-distribution", required=True)
     p.add_argument("--prompt-license", required=True)
@@ -1412,7 +1607,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="judged ablation generations (from the `judge` subcommand)")
     p.add_argument("--model", required=True)
     p.add_argument("--revision", default=None)
-    p.add_argument("--layer", type=int, required=True)
+    p.add_argument("--layer", type=int, default=None,
+                   help="probe layer; inferred from ablation records if omitted")
     p.add_argument("--direction-source", required=True)
     p.add_argument("--prompt-distribution", required=True)
     p.add_argument("--prompt-license", required=True)

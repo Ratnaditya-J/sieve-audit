@@ -104,3 +104,22 @@ def test_single_layer_null_without_multilayer_is_qualified():
     card = run_audit(_bundle(ablation=_abl(30, base=0.9, probe=0.85, rand=0.85))).card
     assert any("cannot be ruled out" in r and "multi-layer" in r
                for r in card.residual_risks)
+
+
+def test_residual_risks_do_not_say_tested_axes_were_untested():
+    """A comprehensive-style card must not print stale boilerplate saying
+    necessity or distributed mechanisms were untested when those axes ran."""
+    from sieve_audit import run_audit
+    from sieve_audit.synth import SCENARIOS
+
+    bundle = SCENARIOS["surface_confounded"]()
+    bundle.ablation = _abl(30, base=0.9, probe=0.2, rand=0.88)
+    bundle.multilayer = _ml(30, base=0.9, probe=0.2, rand=0.88)
+    card = run_audit(bundle).card
+
+    assert card.label == "surface_confounded · necessary"
+    assert not any(r == "Necessity (ablation) untested." for r in card.residual_risks)
+    assert not any(r == "Distributed/multi-layer mechanisms untested."
+                   for r in card.residual_risks)
+    assert any("Necessity was tested" in r for r in card.residual_risks)
+    assert any("Joint multi-layer ablation tested" in r for r in card.residual_risks)

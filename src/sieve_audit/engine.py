@@ -169,37 +169,44 @@ def run_audit(
             controls = run_controls(bundle.steering, cfg)
         except ValueError as exc:
             hard_gaps.append(f"steering stage failed: {exc}")
+    # Optional axes: failures are additive — never block the sufficiency verdict,
+    # but are surfaced on the card as "provided but invalid" so a hostile or
+    # sloppy adapter cannot silently drop evidence.
+    soft_gaps: list[str] = []
+
     necessity = None
     if bundle.ablation:
         try:
             necessity = run_necessity(bundle.ablation, cfg)
-        except ValueError:
-            # necessity is additive; a failure must not block the sufficiency
-            # verdict — it simply omits the necessity finding from the card.
-            necessity = None
+        except ValueError as exc:
+            soft_gaps.append(f"necessity evidence provided but could not be adjudicated: {exc}")
+
     multilayer = None
     if bundle.multilayer:
         try:
             multilayer = run_multilayer(bundle.multilayer, cfg)
-        except ValueError:
-            multilayer = None  # additive; never blocks the sufficiency verdict
+        except ValueError as exc:
+            soft_gaps.append(f"multilayer evidence provided but could not be adjudicated: {exc}")
+
     oracle = None
     if bundle.patching:
         try:
             oracle = run_oracle(bundle.patching, cfg)
-        except ValueError:
-            oracle = None  # additive; never blocks the sufficiency verdict
+        except ValueError as exc:
+            soft_gaps.append(f"oracle evidence provided but could not be adjudicated: {exc}")
+
     leakage = None
     if bundle.leakage is not None:
         try:
             leakage = run_leakage(bundle.leakage, cfg)
-        except ValueError:
-            leakage = None  # additive; never blocks the sufficiency verdict
+        except ValueError as exc:
+            soft_gaps.append(f"leakage evidence provided but could not be adjudicated: {exc}")
+
     deployment = None
     try:
         deployment = run_deployment(bundle, cfg)
-    except ValueError:
-        deployment = None  # reporting-only; never blocks the verdict
+    except ValueError as exc:
+        soft_gaps.append(f"deployment lens could not be computed: {exc}")
 
     hard_gaps.extend(_cross_stage_gaps(bundle, efficacy, controls, cfg))
 
@@ -230,6 +237,7 @@ def run_audit(
     card = build_card(
         bundle, cfg, decision, decod, efficacy, controls, bundle_path, prereg_check,
         necessity, leakage, multilayer, deployment, oracle,
+        soft_gaps=soft_gaps,
     )
     return AuditResult(
         card=card,

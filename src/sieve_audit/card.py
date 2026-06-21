@@ -21,7 +21,6 @@ from .verdict import (
     ALLOWED_CLAIMS,
     DISALLOWED_CLAIMS,
     DISALLOWED_CLAIMS_ALWAYS,
-    RESIDUAL_RISKS_COMMON,
     AuditCard,
     Decision,
     Verdict,
@@ -80,6 +79,15 @@ def _causal_summary(verdict, necessity, multilayer=None, oracle=None) -> dict:
     elif suff == "sufficient" and nec == "necessary":
         combined = ("sufficient AND necessary — strong causal evidence under the "
                     "tested interventions")
+    elif suff == "untested" and nec == "necessary":
+        combined = (
+            "DIRECTION IS CAUSALLY NECESSARY (ablation) but the probe is "
+            "surface-confounded at the decodability stage: the direction is a "
+            "load-bearing intervention coordinate — ablating it degrades the "
+            "behavior — but its scores are explained by surface text statistics "
+            "and it is NOT licensed as a deployment signal detector. "
+            "Causal involvement ≠ valid monitor."
+        )
     elif suff == "not_sufficient" and nec == "necessary":
         combined = ("necessary but NOT sufficient — distributed/partial-mechanism "
                     "signature; the signal is causally involved, not inert")
@@ -147,6 +155,41 @@ def _headline_label(verdict, status: str, necessity, leakage=None, multilayer=No
     return f"{base} · {nec}{leak}"
 
 
+def _base_residual_risks(efficacy, controls, necessity, multilayer) -> list[str]:
+    """Residual risks that match the evidence actually supplied."""
+    risks: list[str] = []
+
+    if efficacy is not None or controls is not None:
+        risks.append(
+            "Sufficiency evidence uses single-layer additive steering; other "
+            "intervention forms may still reveal different causal behavior."
+        )
+    else:
+        risks.append("Causal sufficiency via steering was not tested.")
+
+    if necessity is None:
+        risks.append("Necessity (ablation) untested.")
+    elif not necessity.inconclusive:
+        risks.append(
+            "Necessity was tested by directional ablation under the audited "
+            "scope; other ablation methods and prompt distributions may differ."
+        )
+
+    if multilayer is None:
+        risks.append("Distributed/multi-layer mechanisms untested.")
+    elif not multilayer.inconclusive:
+        risks.append(
+            f"Joint multi-layer ablation tested layer set {multilayer.layers}; "
+            "other layer sets and distributed mechanisms remain outside scope."
+        )
+
+    risks.extend([
+        "Results are specific to the audited prompt distribution and may not transfer.",
+        "Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed.",
+    ])
+    return risks
+
+
 def _canonical_hash(obj: object) -> str:
     return hashlib.sha256(
         json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode()
@@ -155,13 +198,23 @@ def _canonical_hash(obj: object) -> str:
 
 def scope_sentence(bundle: EvidenceBundle) -> str:
     layers = ",".join(str(l) for l in bundle.layers)
+    methods = []
+    if bundle.steering:
+        methods.append("single-layer additive steering")
+    if bundle.ablation:
+        methods.append("ablation")
+    if bundle.multilayer:
+        methods.append("multilayer ablation")
+    if bundle.patching:
+        methods.append("activation patching")
+    method_str = "/".join(methods) if methods else "decodability only"
     return (
         f"[model={bundle.model}"
         + (f"@{bundle.revision}" if bundle.revision else "")
         + f", layer(s)={layers}, direction={bundle.direction_source}, "
         f"prompts={bundle.prompt_distribution}, "
         f"metrics={'/'.join(bundle.behavioral_metrics)}, "
-        f"single-layer additive steering]"
+        f"{method_str}]"
     )
 
 
@@ -179,6 +232,7 @@ def build_card(
     multilayer=None,
     deployment=None,
     oracle=None,
+    soft_gaps: list[str] | None = None,
 ) -> AuditCard:
     scope = scope_sentence(bundle)
     # Causal intervention(s) actually run; causal verdicts are bounded to these so
@@ -374,7 +428,10 @@ def build_card(
 
     allowed = allowed + necessity_claims + multilayer_claims + oracle_claims
 
-    risks = list(RESIDUAL_RISKS_COMMON)
+    risks = _base_residual_risks(efficacy, controls, necessity, multilayer)
+    if soft_gaps:
+        for gap in soft_gaps:
+            risks.insert(0, f"[provided but invalid] {gap}")
     if risks_prereg:
         risks.insert(0, risks_prereg)
     if profile["status"] == "loosened":

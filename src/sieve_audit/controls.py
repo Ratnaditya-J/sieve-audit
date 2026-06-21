@@ -270,7 +270,10 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
     violations: list[str] = []
 
     arms = sorted({r.arm for r in records})
-    missing = [c for c in cfg.required_controls if c not in arms]
+    # Auto-detect multi-draw null: any random_N arms beyond the canonical `random`
+    extra_random = sorted(a for a in arms if a.startswith("random_"))
+    effective_controls = list(cfg.required_controls) + extra_random
+    missing = [c for c in effective_controls if c not in arms]
     if PROBE_ARM not in arms:
         raise ValueError("steering records contain no 'probe' arm")
 
@@ -314,12 +317,18 @@ def run_controls(records: list[SteeringRecord], cfg: AuditConfig) -> ControlsRes
     significant = [a for a in primary if arm_effects[PROBE_ARM][a].excludes(0.0)]
     probe_sig = len(significant) == len(primary) and bool(primary)
 
+    if extra_random:
+        notes.append(
+            f"multi-draw null: {len(extra_random) + 1} random control draws present "
+            f"({', '.join(['random'] + extra_random)}); probe must beat ALL of them"
+        )
+
     # probe vs each control: paired magnitude comparison at every primary point
     probe_vs_controls: dict[float, dict[str, CI]] = {}
-    exceeds_all = bool(primary) and not missing and bool(cfg.required_controls)
+    exceeds_all = bool(primary) and not missing and bool(effective_controls)
     for alpha in primary:
         probe_vs_controls[alpha] = {}
-        for control in cfg.required_controls:
+        for control in effective_controls:
             d_control = deltas.get(control, {}).get(alpha)
             if not d_control:
                 notes.append(f"control '{control}' missing at alpha={alpha:g}")

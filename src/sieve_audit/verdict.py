@@ -294,9 +294,36 @@ DISALLOWED_CLAIMS: dict[Verdict, list[str]] = {
     ],
 }
 
-RESIDUAL_RISKS_COMMON: list[str] = [
-    "Single-layer additive steering only; distributed/multi-layer mechanisms untested.",
-    "Sufficiency-style evidence only; necessity (ablation) untested.",
-    "Results are specific to the audited prompt distribution and may not transfer.",
-    "Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed.",
-]
+def residual_risks(necessity=None, multilayer=None) -> list[str]:
+    """Emit only the caveats that are still open given what was actually tested.
+
+    Caveats about untested axes are suppressed when evidence for those axes was
+    provided and adjudicated — emitting a 'untested' warning on a run that did
+    test the axis is a credibility error on the card."""
+    risks = []
+    ml_tested = multilayer is not None and not multilayer.inconclusive
+    sl_tested = necessity is not None and not necessity.inconclusive
+    if not ml_tested:
+        if sl_tested:
+            # single-layer necessity ran but joint multi-layer did not
+            risks.append(
+                "Necessity tested at single layer only; a distributed, "
+                "multi-layer ('committee') mechanism was NOT tested and cannot "
+                "be ruled out by this null."
+            )
+        else:
+            risks.append(
+                "Single-layer additive steering only; distributed/multi-layer "
+                "mechanisms untested."
+            )
+    if not sl_tested and not ml_tested:
+        risks.append("Sufficiency-style evidence only; necessity (ablation) untested.")
+    risks += [
+        "Results are specific to the audited prompt distribution and may not transfer.",
+        "Behavioral metrics depend on judge quality; judge agreement is reported, not guaranteed.",
+    ]
+    return risks
+
+
+# Keep old name for any external callers; points at the no-arg default.
+RESIDUAL_RISKS_COMMON: list[str] = residual_risks()
