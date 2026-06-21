@@ -48,6 +48,16 @@ RUN="python -m sieve_audit.adapters.hf_steering_runner"
 mkdir -p "$OUT"
 echo "[pod] model=$MODEL dtype=$DTYPE n_random=$N_RANDOM"
 
+# ---- prompt generation (if prompts not already present) ----
+# prepare_prompts.py fetches VLAF scenarios from GitHub (requires internet).
+# If you scp'd the prompts directory from local, this step is skipped.
+if [[ ! -f "$PROMPTS/holdout.jsonl" ]]; then
+  echo "[pod] generating prompts via prepare_prompts.py..."
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  python3 "$SCRIPT_DIR/prepare_prompts.py"
+  echo "[pod] prompts ready"
+fi
+
 # ---- preflight ----
 if [[ "${SMOKE:-0}" != "1" ]]; then
   : "${OPENAI_API_KEY:?set OPENAI_API_KEY for judges}"
