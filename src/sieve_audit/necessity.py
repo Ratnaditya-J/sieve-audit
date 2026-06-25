@@ -39,6 +39,7 @@ class NecessityResult:
     n_paired: int
     judges: list[str]
     probe_drop: CI | None            # mean(baseline - probe_ablated), paired by prompt
+    random_drop: CI | None           # mean(baseline - random_ablated), paired by prompt
     probe_vs_random_drop: CI | None  # mean((baseline-probe) - (baseline-random)), paired
     judges_agree_direction: bool
     necessary: bool
@@ -53,6 +54,7 @@ class NecessityResult:
             "n_paired": self.n_paired,
             "judges": self.judges,
             "probe_drop": self.probe_drop.to_dict() if self.probe_drop else None,
+            "random_drop": self.random_drop.to_dict() if self.random_drop else None,
             "probe_vs_random_drop": (
                 self.probe_vs_random_drop.to_dict()
                 if self.probe_vs_random_drop
@@ -96,6 +98,7 @@ def run_necessity(records: list[AblationRecord], cfg: AuditConfig) -> NecessityR
             n_paired=0,
             judges=judges,
             probe_drop=None,
+            random_drop=None,
             probe_vs_random_drop=None,
             judges_agree_direction=False,
             necessary=False,
@@ -127,11 +130,15 @@ def run_necessity(records: list[AblationRecord], cfg: AuditConfig) -> NecessityR
         )
 
     probe_drops = np.array([base[p] - probe[p] for p in shared])
+    rand_drops = np.array([base[p] - rand[p] for p in shared])
     paired_excess = np.array(
         [(base[p] - probe[p]) - (base[p] - rand[p]) for p in shared]
     )
     probe_drop = bootstrap_mean(probe_drops, rng, cfg.n_boot, cfg.ci_level)
     probe_vs_random = bootstrap_mean(paired_excess, rng, cfg.n_boot, cfg.ci_level)
+    # raw random-ablation drop (display only): computed AFTER probe_vs_random so the
+    # rng-consumption order for the gating CIs is unchanged and verdicts stay identical.
+    random_drop = bootstrap_mean(rand_drops, rng, cfg.n_boot, cfg.ci_level)
 
     # every judge must see the probe-ablation drop go the same (positive) way
     direction_ok = True
@@ -161,6 +168,7 @@ def run_necessity(records: list[AblationRecord], cfg: AuditConfig) -> NecessityR
         n_paired=len(shared),
         judges=judges,
         probe_drop=probe_drop,
+        random_drop=random_drop,
         probe_vs_random_drop=probe_vs_random,
         judges_agree_direction=direction_ok,
         necessary=necessary,

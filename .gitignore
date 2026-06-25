@@ -17,3 +17,10 @@ runs/
 *.npz
 *.jsonl
 data/private/
+
+# Personal drafts: keep local, NEVER publish to GitHub.
+# LessWrong / blog-post drafts and private notes.
+reports/lesswrong_outline.md
+*.local.md
+*.local.*
+drafts/

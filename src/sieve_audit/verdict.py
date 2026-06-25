@@ -202,10 +202,18 @@ def decide(
                 f"p={controls.dose_p:.3f})"
             )
         if not (controls.judge.agreement_ok and controls.judge.judges_agree_on_direction):
-            reasons.append(
-                "judge agreement insufficient (cannot support the stronger claim; "
-                "does not rescue the signal from this verdict)"
-            )
+            if controls.judge.behavior_floor:
+                reasons.append(
+                    "one-sided judged behavior: one outcome class dominates the judged "
+                    "results, so Cohen's kappa is degenerate and there is little behavioral "
+                    "variation for steering/ablation to move. The judges AGREE on the "
+                    "outcome, so this is NOT judge disagreement or unreliable judges."
+                )
+            else:
+                reasons.append(
+                    "judge agreement insufficient (cannot support the stronger claim; "
+                    "does not rescue the signal from this verdict)"
+                )
         reasons.extend(controls.notes)
         return Decision(Verdict.NOT_CAUSALLY_SUFFICIENT, "ok", reasons)
 

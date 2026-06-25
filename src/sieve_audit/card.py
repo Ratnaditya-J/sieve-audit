@@ -516,6 +516,11 @@ def _fmt_ci(d: dict) -> str:
     return f"{d['point']:.3f} [{d['lo']:.3f}, {d['hi']:.3f}]"
 
 
+def _fmt_stat(x: float) -> str:
+    """Format a possibly-NaN agreement statistic; NaN renders as 'n/a'."""
+    return f"{x:.2f}" if x == x else "n/a"
+
+
 _PROFILE_BADGE = {
     "strict": "✅ {name} (the standard bar)",
     "stricter": "✅ stricter than {name}",
@@ -619,9 +624,17 @@ def card_to_markdown(card: AuditCard) -> str:
             )
     ctrl = card.diagnostics.get("controls")
     if ctrl:
+        ja = ctrl["judge"]
+        raw = ja.get("raw_agreement", float("nan"))
+        raw_str = f", raw={raw:.2f}" if raw == raw else ""  # raw==raw is False only for NaN
+        floor_str = (
+            "  [one-sided judged behavior: judges agree, one outcome dominates]"
+            if ja.get("behavior_floor") else ""
+        )
         lines.append(
             f"- Dose-response: rho={ctrl['dose_rho']:.2f} (p={ctrl['dose_p']:.4f}); "
-            f"judge agreement: spearman={ctrl['judge']['min_pairwise_spearman']:.2f}, kappa={ctrl['judge']['min_pairwise_kappa']:.2f}"
+            f"judge agreement: spearman={_fmt_stat(ja['min_pairwise_spearman'])}, "
+            f"kappa={_fmt_stat(ja['min_pairwise_kappa'])}{raw_str}{floor_str}"
         )
         for alpha, by_control in ctrl["probe_vs_controls"].items():
             for control, diff in by_control.items():
@@ -638,8 +651,9 @@ def card_to_markdown(card: AuditCard) -> str:
             lines.append(
                 f"- Necessity (ablation): "
                 f"{'NECESSARY' if nec['necessary'] else 'not necessary'} "
-                f"(probe-ablation drop {_fmt_ci(nec['probe_drop'])}; "
-                f"vs ablate_random {_fmt_ci(nec['probe_vs_random_drop'])})"
+                f"(probe-ablation drop {_fmt_ci(nec['probe_drop'])}, "
+                f"random-ablation drop {_fmt_ci(nec['random_drop'])}, "
+                f"probe−random excess {_fmt_ci(nec['probe_vs_random_drop'])})"
             )
     ml = card.diagnostics.get("multilayer")
     if ml:
@@ -653,8 +667,9 @@ def card_to_markdown(card: AuditCard) -> str:
             lines.append(
                 f"- Multi-layer ablation (joint layers {ml['layers']}): "
                 f"{'NECESSARY (joint)' if ml['necessary'] else 'not necessary (joint)'} "
-                f"(joint-ablation drop {_fmt_ci(mn['probe_drop'])}; "
-                f"vs ablate_random {_fmt_ci(mn['probe_vs_random_drop'])})"
+                f"(joint-ablation drop {_fmt_ci(mn['probe_drop'])}, "
+                f"random-ablation drop {_fmt_ci(mn['random_drop'])}, "
+                f"probe−random excess {_fmt_ci(mn['probe_vs_random_drop'])})"
             )
     orc = card.diagnostics.get("oracle")
     if orc:

@@ -143,3 +143,77 @@ def test_dose_response_null_is_not_significant():
     }
     _, p = dose_response_clustered(deltas, rng, n_perm=500)
     assert p > 0.05
+
+
+# --- behavioral floor vs judge disagreement (kappa-paradox fix) --------------
+
+
+def _judge_recs(n, a, b, arm="probe", alpha=10.0, start=0):
+    return [
+        SteeringRecord(
+            arm=arm,
+            alpha=alpha,
+            prompt_id=f"p{i}",
+            judge_scores={"judge_a": a, "judge_b": b},
+        )
+        for i in range(start, start + n)
+    ]
+
+
+def test_judge_floor_when_behavior_absent_but_judges_agree():
+    """Near-absent behavior with agreeing judges is a floor effect, not judge
+    disagreement — and the diagnosis must NOT loosen the gate."""
+    from sieve_audit.controls import _judge_agreement
+
+    jr = _judge_agreement(_judge_recs(40, 0.0, 0.0), {}, [], CFG)
+    assert jr.behavior_floor is True
+    assert jr.raw_agreement >= 0.9
+    assert jr.agreement_ok is False          # gate stays exactly as conservative
+    assert any("one-sided" in n.lower() for n in jr.notes)
+
+
+def test_no_floor_when_judges_genuinely_disagree():
+    """Low raw agreement is genuine disagreement, never a floor effect."""
+    from sieve_audit.controls import _judge_agreement
+
+    jr = _judge_agreement(_judge_recs(40, 0.9, 0.1), {}, [], CFG)
+    assert jr.behavior_floor is False
+    assert jr.raw_agreement < 0.5   # low raw agreement is the discriminator, not just the flag
+
+
+def test_no_floor_when_behavior_present_and_judges_agree():
+    """Varied, present behavior with agreeing judges: agreement_ok, no floor."""
+    from sieve_audit.controls import _judge_agreement
+
+    recs = _judge_recs(20, 0.95, 0.95, start=0) + _judge_recs(20, 0.05, 0.05, start=20)
+    jr = _judge_agreement(recs, {}, [], CFG)
+    assert jr.behavior_floor is False
+    assert jr.agreement_ok is True
+
+
+def test_behavior_floor_reason_replaces_agreement_insufficient_end_to_end():
+    """End-to-end: a floored sufficiency run names the floor in its decision
+    reasons, NOT 'judge agreement insufficient', and the verdict is unchanged."""
+    bundle = scenario_causally_sufficient()
+    for r in bundle.steering:
+        r.judge_scores = {"judge_a": 0.0, "judge_b": 0.0}  # behavior absent, judges agree
+    card = run_audit(bundle).card
+    assert card.verdict == Verdict.NOT_CAUSALLY_SUFFICIENT
+    j = card.diagnostics["controls"]["judge"]
+    assert j["behavior_floor"] is True and j["agreement_ok"] is False
+    reasons = " ".join(card.diagnostics["decision_reasons"]).lower()
+    assert "one-sided" in reasons
+    assert "judge agreement insufficient" not in reasons
+
+
+def test_floor_wording_accurate_for_near_universal_behavior():
+    """Degenerate class balance fires for near-UNIVERSAL behavior too; the wording
+    must stay accurate and never claim the behavior was absent / did not occur."""
+    from sieve_audit.controls import _judge_agreement
+
+    jr = _judge_agreement(_judge_recs(40, 0.97, 0.95), {}, [], CFG)
+    assert jr.behavior_floor is True          # kappa degenerate under imbalance, either side
+    note = " ".join(jr.notes).lower()
+    assert "did not occur" not in note
+    assert "near-absent" not in note
+    assert "one-sided" in note                # direction-neutral, accurate wording

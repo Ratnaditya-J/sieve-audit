@@ -41,6 +41,15 @@ from .stats import (
 
 PROBE_ARM = "probe"
 
+# Degenerate-class-balance detection thresholds (diagnostic only; never gate a
+# verdict). The "kappa paradox": two judges can agree at a very high raw rate yet
+# score a degenerate (near-zero / NaN) Cohen's kappa when one outcome class
+# dominates — the judged behavior is one-sided, near-absent OR near-universal — and
+# a binarized rater is near-constant. That reflects the behavior distribution, not
+# judge disagreement, and the card must say so instead of "agreement insufficient".
+_FLOOR_MIN_RAW_AGREEMENT = 0.9
+_FLOOR_MAX_MINORITY_RATE = 0.05
+
 
 @dataclass
 class JudgeResult:
@@ -52,6 +61,8 @@ class JudgeResult:
     judges_agree_on_direction: bool
     suspected_duplicates: bool      # near-perfect agreement over many records
     notes: list[str] = field(default_factory=list)
+    raw_agreement: float = float("nan")   # min pairwise raw binary agreement (informative)
+    behavior_floor: bool = False          # judges agree but judged behavior is one-sided (kappa paradox)
 
     def to_dict(self) -> dict:
         return {
@@ -62,6 +73,8 @@ class JudgeResult:
             "agreement_ok": self.agreement_ok,
             "judges_agree_on_direction": self.judges_agree_on_direction,
             "suspected_duplicates": self.suspected_duplicates,
+            "raw_agreement": self.raw_agreement,
+            "behavior_floor": self.behavior_floor,
             "notes": self.notes,
         }
 
@@ -224,6 +237,44 @@ def _judge_agreement(
             f"(< {cfg.min_informative_judged}): binarized agreement not assessable"
         )
 
+    # Degenerate-class-balance detection ("kappa paradox"): when the judges agree at a
+    # high raw rate but kappa is degenerate because one outcome class dominates (the
+    # judged behavior is one-sided, near-absent or near-universal, so a binarized rater
+    # is near-constant), kappa cannot assess reliability. Report this as one-sided
+    # judged behavior, NOT judge disagreement. Diagnostic only: agreement_ok below is
+    # left untouched, so the gate stays exactly as conservative.
+    raw_agreement = float("nan")
+    behavior_floor = False
+    if len(informative) >= cfg.min_informative_judged:
+        raw_pairs = [
+            float(np.mean(
+                np.array([r.judge_scores[a] > thr for r in informative])
+                == np.array([r.judge_scores[b] > thr for r in informative])
+            ))
+            for a, b in combinations(judges, 2)
+        ]
+        raw_agreement = float(min(raw_pairs)) if raw_pairs else float("nan")
+        pos_rates = [
+            float(np.mean([r.judge_scores[j] > thr for r in informative]))
+            for j in judges
+        ]
+        min_minority_rate = min(min(p, 1.0 - p) for p in pos_rates)
+        mean_pos = float(np.mean(pos_rates))
+        behavior_floor = (
+            not kappa_ok
+            and raw_agreement >= _FLOOR_MIN_RAW_AGREEMENT
+            and min_minority_rate < _FLOOR_MAX_MINORITY_RATE
+        )
+        if behavior_floor:
+            notes.append(
+                f"one-sided judged behavior, not judge disagreement: judges agree at "
+                f"{raw_agreement:.0%} raw on {len(informative)} records, but one outcome "
+                f"class dominates (judged positive rate {mean_pos:.0%}); Cohen's kappa is "
+                f"degenerate under this class imbalance and cannot assess agreement. There "
+                f"is little behavioral variation for the causal axes to exploit; this "
+                f"reflects the behavior distribution, not unreliable judges."
+            )
+
     agreement_ok = (
         (min_spearman >= cfg.min_judge_spearman)
         and kappa_ok
@@ -258,6 +309,8 @@ def _judge_agreement(
         agreement_ok=agreement_ok,
         judges_agree_on_direction=direction_ok,
         suspected_duplicates=suspected_duplicates,
+        raw_agreement=raw_agreement,
+        behavior_floor=behavior_floor,
         notes=notes,
     )
 

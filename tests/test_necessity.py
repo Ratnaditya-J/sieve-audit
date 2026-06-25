@@ -124,3 +124,37 @@ def test_ablation_only_headline_surfaces_necessity():
     assert card.status == "insufficient_protocol"   # machine-readable status unchanged
     assert card.verdict is None
     assert card.label == "necessary · sufficiency not established"
+
+
+# --- display-mislabel regression: the raw random drop must be reported, and the
+#     probe−random excess must never be relabeled as the random drop -----------
+
+
+def test_necessity_reports_raw_random_drop_distinct_from_excess():
+    res = run_necessity(_abl(30, base=0.9, probe=0.2, rand=0.88), AuditConfig(seed=0))
+    assert res.random_drop is not None
+    # random ablation barely moves behavior (~0.02); probe ablation moves it hard (~0.7)
+    assert res.random_drop.point < 0.1
+    assert res.probe_drop.point > 0.5
+    # the excess is exactly probe_drop - random_drop, i.e. NOT the raw random drop
+    assert abs(
+        res.probe_vs_random_drop.point - (res.probe_drop.point - res.random_drop.point)
+    ) < 1e-6
+    d = res.to_dict()
+    assert d.get("random_drop") is not None
+
+
+def test_card_necessity_line_shows_random_drop_not_mislabeled_excess():
+    from sieve_audit import run_audit
+    from sieve_audit.card import card_to_markdown
+    from sieve_audit.synth import SCENARIOS
+
+    bundle = SCENARIOS["not_causally_sufficient"]()
+    bundle.ablation = _abl(30, base=0.9, probe=0.2, rand=0.88)  # necessary; random barely moves
+    md = card_to_markdown(run_audit(bundle).card)
+    nec_line = next(
+        l for l in md.splitlines() if l.startswith("- Necessity (ablation):")
+    )
+    assert "random-ablation drop" in nec_line   # the raw random drop is now shown
+    assert "excess" in nec_line                 # and the excess is labeled as such
+    assert "vs ablate_random" not in nec_line   # the old mislabel must not return
