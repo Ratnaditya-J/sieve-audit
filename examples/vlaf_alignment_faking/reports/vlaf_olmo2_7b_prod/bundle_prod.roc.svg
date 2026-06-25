@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 440" font-family="sans-serif" font-size="12">
+<rect x="0" y="0" width="440" height="440" fill="white"/>
+<line x1="50" y1="50" x2="50" y2="390" stroke="#222"/>
+<line x1="50" y1="390" x2="390" y2="390" stroke="#222"/>
+<line x1="50" y1="390" x2="390" y2="50" stroke="#bbb" stroke-dasharray="4 4"/>
+<text x="220.0" y="428" text-anchor="middle">False-alarm rate (FPR)</text>
+<text x="14" y="220.0" text-anchor="middle" transform="rotate(-90 14 220.0)">Recall (TPR)</text>
+<text x="50.0" y="406" text-anchor="middle" fill="#555">0.0</text>
+<text x="42" y="394.0" text-anchor="end" fill="#555">0.0</text>
+<text x="220.0" y="406" text-anchor="middle" fill="#555">0.5</text>
+<text x="42" y="224.0" text-anchor="end" fill="#555">0.5</text>
+<text x="390.0" y="406" text-anchor="middle" fill="#555">1.0</text>
+<text x="42" y="54.0" text-anchor="end" fill="#555">1.0</text>
+<polyline points="50.0,390.0 50.0,388.6 50.0,55.4 51.4,55.4 51.4,54.1 52.7,54.1 52.7,52.7 55.4,52.7 55.4,51.4 62.2,51.4 62.2,50.0 390.0,50.0" fill="none" stroke="#2563eb" stroke-width="2"/>
+<rect x="60" y="47" width="12" height="3" fill="#2563eb"/>
+<text x="78" y="52">in_distribution (AUROC 1.00)</text>
+<polyline points="50.0,390.0 50.0,383.2 50.0,328.8 50.0,315.2 56.8,315.2 56.8,267.6 63.6,267.6 63.6,240.4 70.4,240.4 84.0,240.4 97.6,240.4 97.6,233.6 104.4,233.6 104.4,220.0 104.4,213.2 111.2,213.2 111.2,206.4 131.6,206.4 131.6,199.6 138.4,199.6 138.4,179.2 145.2,179.2 145.2,165.6 152.0,165.6 152.0,158.8 158.8,158.8 158.8,145.2 165.6,145.2 165.6,131.6 172.4,131.6 172.4,118.0 179.2,118.0 179.2,111.2 179.2,97.6 206.4,97.6 206.4,84.0 220.0,84.0 233.6,84.0 240.4,84.0 240.4,77.2 247.2,77.2 247.2,70.4 260.8,70.4 260.8,63.6 288.0,63.6 301.6,63.6 308.4,63.6 322.0,63.6 328.8,63.6 328.8,50.0 376.4,50.0 390.0,50.0" fill="none" stroke="#16a34a" stroke-width="2"/>
+<rect x="60" y="65" width="12" height="3" fill="#16a34a"/>
+<text x="78" y="70">off_distribution (AUROC 0.79)</text>
+<polyline points="50.0,390.0 51.4,388.6 390.0,50.0" fill="none" stroke="#dc2626" stroke-width="2"/>
+<rect x="60" y="83" width="12" height="3" fill="#dc2626"/>
+<text x="78" y="88">leakage_removed (AUROC 0.50)</text>
+</svg>
