@@ -4,28 +4,28 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 
-**Safety Indicator Evidence Validation Engine** — validity checks for AI safety signals.
+**Safety Indicator Evidence Validation Engine**: validity checks for AI safety signals.
 
 > Does your safety signal survive controls, or is it just decodable?
 
 SIEVE audits whether an activation-based safety **signal** (a probe direction, SAE
 feature, monitor score, …) is *merely decodable* or actually *causally
-load-bearing* — and emits a scoped, caveat-bound **evidence card** you can cite.
+load-bearing*, and emits a scoped, caveat-bound **evidence card** you can cite.
 It is a **validity layer upstream of AI control**: vet a signal *before* it is
 trusted in a control protocol or a public safety claim.
 
-Its job is to **prevent overclaiming from activation evidence** — not to prove
+Its job is to **prevent overclaiming from activation evidence**, not to prove
 models safe.
 
 ## Verdict, in one glance
 
 A SIEVE audit returns one of five verdicts:
 
-1. **not decodable** — no better than surface baselines
-2. **surface-confounded** — decodable, but a length/TF-IDF baseline matches it
-3. **intervention ineffective → inconclusive** — the steer never took effect (not a null!)
-4. **not causally sufficient** — effective, but no more than random / orthogonal / wrong-layer controls
-5. **causally sufficient** — exceeds controls, dose-responsive, judge-agreed
+1. **not decodable**: no better than surface baselines
+2. **surface-confounded**: decodable, but a length/TF-IDF baseline matches it
+3. **intervention ineffective → inconclusive**: the steer never took effect (not a null!)
+4. **not causally sufficient**: effective, but no more than random / orthogonal / wrong-layer controls
+5. **causally sufficient**: exceeds controls, dose-responsive, judge-agreed
 
 ## Status
 
@@ -35,7 +35,7 @@ scores, residual-stream movement, judged steering outputs) so the verdict
 logic is GPU-free and reproducible from `(bundle, config, seed)`; adapters
 produce bundles from models or published artifacts.
 
-- `sieve selftest` — six rigged ground-truth scenarios (noise probe,
+- `sieve selftest`: six rigged ground-truth scenarios (noise probe,
   length-confounded probe, dead steering hook, decodable-but-epiphenomenal
   direction, truly causal direction, incomplete protocol) must return exactly
   the rigged verdicts. 6/6.
@@ -44,11 +44,11 @@ produce bundles from models or published artifacts.
   weakened configs, in-sample probe scores, ...) with regression tests for
   every exploit.
 - First real-world audit: the published Apollo deception probes
-  (arXiv 2502.03407) from released artifacts —
-  see [`examples/apollo_deception/`](examples/apollo_deception/).
+  (arXiv 2502.03407) from released artifacts.
+  See [`examples/apollo_deception/`](examples/apollo_deception/).
 - End-to-end GPU run: Qwen2.5-1.5B-Instruct refusal direction, all eight
-  axes, multi-draw null (3 random controls) —
-  see [`examples/comprehensive_refusal/`](examples/comprehensive_refusal/).
+  axes, multi-draw null (3 random controls).
+  See [`examples/comprehensive_refusal/`](examples/comprehensive_refusal/).
   Verdict `surface_confounded · necessary`: probe is causally load-bearing
   (ablation) but scores are explained by surface text statistics on this
   small model. Harder target (non-surface-confounded, subtler behavior) is
@@ -65,15 +65,15 @@ sieve selftest   # six rigged ground-truth scenarios; verdicts must match (6/6)
 ```
 
 For development (editable, with the test suite): `pip install -e ".[dev]"`.
-Bundle-producing adapters need extras — `".[runner]"` (HF models) and
+Bundle-producing adapters need extras: `".[runner]"` (HF models) and
 `".[judges]"` (LLM judges); the audit engine itself needs neither.
 
-## Quickstart — audit your own probe
+## Quickstart: audit your own probe
 
 You bring a probe's per-example **scores**, the ground-truth **labels**, the
 **texts** they were scored on, and a **family** id per example (so baselines and
 the probe face the same held-out generalization test). SIEVE tells you whether
-the signal beats surface baselines — or is just reading the prompt.
+the signal beats surface baselines, or is just reading the prompt.
 
 ```python
 from sieve_audit import EvidenceBundle, DecodabilityEvidence, run_audit
@@ -101,10 +101,10 @@ says so:
 surface_confounded     # probe AUROC 0.975, but a TF-IDF baseline scores 1.00
 ```
 
-That's the point — a high AUROC that a word-counter matches isn't evidence the
+That's the point: a high AUROC that a word-counter matches isn't evidence the
 *model* represents anything. To go past decodability to a **causal** verdict,
 add `efficacy` + `steering` records (matched random / orthogonal / wrong-layer
-arms) to the bundle — see [`docs/bundle_format.md`](docs/bundle_format.md), or
+arms) to the bundle. See [`docs/bundle_format.md`](docs/bundle_format.md), or
 have an adapter build the bundle from a model (`sieve_audit.adapters.hf_steering_runner`)
 or from published artifacts ([`examples/apollo_deception/`](examples/apollo_deception/)).
 
@@ -122,15 +122,15 @@ run outputs, and non-redistributable benchmark prompts are never committed
 
 ## Writeup
 
-The field-facing summary — the standard, the Apollo audit results, and the
-whitespace — is in
+The field-facing summary (the standard, the Apollo audit results, and the
+whitespace) is in
 [`docs/standard-validity-audit.md`](docs/standard-validity-audit.md).
 
 ## Landscape
 
 Where SIEVE sits relative to interpretability platforms, evals/red-teaming
-companies, and the probe-validity literature — and why the reusable
-validity-harness niche is empty — is documented with sources in
+companies, and the probe-validity literature (and why the reusable
+validity-harness niche is empty) is documented with sources in
 [`docs/related_work.md`](docs/related_work.md).
 
 ## Provenance
@@ -141,4 +141,4 @@ paper *"Probing Is Not Enough"*
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
