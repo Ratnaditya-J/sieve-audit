@@ -1,0 +1,22 @@
+{
+  "n_pool": 120,
+  "n_centered_baseline": 39,
+  "n_centered_movers": 28,
+  "n_selected": 28,
+  "mean_base_selected": 0.505,
+  "mean_pos_selected": 0.978,
+  "mean_neg_selected": 0.238,
+  "baseline_hist_tenths": {
+    "0": 7,
+    "1": 55,
+    "2": 0,
+    "3": 0,
+    "4": 4,
+    "5": 31,
+    "6": 4,
+    "7": 0,
+    "8": 12,
+    "9": 4,
+    "10": 3
+  }
+}

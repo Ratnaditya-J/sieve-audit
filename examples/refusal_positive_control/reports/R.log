@@ -1,0 +1,195 @@
+=== B. decode-lofo (build direction + probe AUROC vs surface; CHEAP GATE) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[auto-layer] sweeping 5 candidate layers (12–16) across 320 prompts (pool=last)
+  25/320
+  50/320
+  75/320
+  100/320
+  125/320
+  150/320
+  175/320
+  200/320
+  225/320
+  250/320
+  275/320
+  300/320
+[auto-layer] selected layer 16 (AUROC 0.967); sweep: L12=0.859, L13=0.909, L14=0.951, L15=0.967, L16=0.967
+[decode-lofo] extracting layer-16 activations for 320 holdout prompts (pool=last)
+  25/320
+  50/320
+  75/320
+  100/320
+  125/320
+  150/320
+  175/320
+  200/320
+  225/320
+  250/320
+  275/320
+  300/320
+[decode-lofo] 8 folds (definitions,discrimination,figurative_language,historical_events,homonyms,privacy,safe_contexts,safe_targets) -> examples/refusal_positive_control/out/decode.json  (every score is out-of-family)
+[decode-lofo] full-data direction (+controls), layer=16 -> examples/refusal_positive_control/out/vectors.npz
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+  File "<stdin>", line 3, in <dictcomp>
+  File "<stdin>", line 3, in <genexpr>
+AttributeError: 'dict' object has no attribute 'lower'
+=== C. steer candidate pool at +/-0.3 (for swing calibration) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[transformers] The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+[layer] using auto-selected layer 16 from examples/refusal_positive_control/out/vectors.npz
+[steer] 80 prompts x 4 arms x 3 alphas = 960 generations
+  20/960  ETA 1822s
+  40/960  ETA 1770s
+  60/960  ETA 1731s
+  80/960  ETA 1689s
+  100/960  ETA 1660s
+  120/960  ETA 1622s
+  140/960  ETA 1589s
+  160/960  ETA 1554s
+  180/960  ETA 1489s
+  200/960  ETA 1426s
+  220/960  ETA 1377s
+  240/960  ETA 1332s
+  260/960  ETA 1296s
+  280/960  ETA 1262s
+  300/960  ETA 1228s
+  320/960  ETA 1192s
+  340/960  ETA 1158s
+  360/960  ETA 1119s
+  380/960  ETA 1085s
+  400/960  ETA 1050s
+  420/960  ETA 1015s
+  440/960  ETA 980s
+  460/960  ETA 944s
+  480/960  ETA 908s
+  500/960  ETA 870s
+  520/960  ETA 832s
+  540/960  ETA 795s
+  560/960  ETA 757s
+  580/960  ETA 716s
+  600/960  ETA 677s
+  620/960  ETA 637s
+  640/960  ETA 599s
+  660/960  ETA 561s
+  680/960  ETA 525s
+  700/960  ETA 488s
+  720/960  ETA 451s
+  740/960  ETA 414s
+  760/960  ETA 376s
+  780/960  ETA 339s
+  800/960  ETA 301s
+  820/960  ETA 263s
+  840/960  ETA 226s
+  860/960  ETA 188s
+  880/960  ETA 150s
+  900/960  ETA 113s
+  920/960  ETA 75s
+  940/960  ETA 38s
+  960/960  ETA 0s
+[steer] -> examples/refusal_positive_control/out/pool_steer.jsonl
+=== D. calibrate borderline steer set (sufficiency reproduce-GATE) ===
+[calib] selected=40 mean graded +0.3=0.91 -0.3=0.18 swing=0.73 (n_swing>=0.2: 64)
+[calib] reproduce-gate (sufficiency) OK
+=== E. full steer on selected borderline set (symmetric grid) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[transformers] The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+[layer] using auto-selected layer 16 from examples/refusal_positive_control/out/vectors.npz
+[steer] 40 prompts x 4 arms x 5 alphas = 800 generations
+  20/800  ETA 1501s
+  40/800  ETA 1447s
+  60/800  ETA 1432s
+  80/800  ETA 1396s
+  100/800  ETA 1337s
+  120/800  ETA 1297s
+  140/800  ETA 1245s
+  160/800  ETA 1195s
+  180/800  ETA 1150s
+  200/800  ETA 1092s
+  220/800  ETA 1057s
+  240/800  ETA 1023s
+  260/800  ETA 994s
+  280/800  ETA 958s
+  300/800  ETA 924s
+  320/800  ETA 891s
+  340/800  ETA 853s
+  360/800  ETA 816s
+  380/800  ETA 782s
+  400/800  ETA 747s
+  420/800  ETA 709s
+  440/800  ETA 672s
+  460/800  ETA 632s
+  480/800  ETA 592s
+  500/800  ETA 555s
+  520/800  ETA 518s
+  540/800  ETA 481s
+  560/800  ETA 445s
+  580/800  ETA 409s
+  600/800  ETA 372s
+  620/800  ETA 335s
+  640/800  ETA 298s
+  660/800  ETA 261s
+  680/800  ETA 223s
+  700/800  ETA 186s
+  720/800  ETA 149s
+  740/800  ETA 112s
+  760/800  ETA 74s
+  780/800  ETA 37s
+  800/800  ETA 0s
+[steer] -> examples/refusal_positive_control/out/steer_gen.jsonl
+=== F. judge steer (deterministic, judge-free) ===
+[judge] scoring 800 generations with 2 judges, 8 workers
+  50/800
+  100/800
+  150/800
+  200/800
+  250/800
+  300/800
+  350/800
+  400/800
+  450/800
+  500/800
+  550/800
+  600/800
+  650/800
+  700/800
+  750/800
+  800/800
+[judge] -> examples/refusal_positive_control/out/judged_steer.jsonl
+=== G. ablate harmful set (necessity) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[transformers] The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+[layer] using auto-selected layer 16 from examples/refusal_positive_control/out/vectors.npz
+[ablate] 50 prompts x 3 arms = 150 generations
+  20/150
+  40/150
+  60/150
+  80/150
+  100/150
+  120/150
+  140/150
+[ablate] -> examples/refusal_positive_control/out/ablate_gen.jsonl   (next: judge, then bundle-ablation)
+=== H. judge ablate + necessity reproduce-GATE ===
+[judge] scoring 150 generations with 2 judges, 8 workers
+  50/150
+  100/150
+  150/150
+[judge] -> examples/refusal_positive_control/out/judged_ablate.jsonl
+[nec-gate] mean refusal by arm: {'baseline': 0.781, 'probe': 0.418, 'ablate_random': 0.805}
+[nec-gate] baseline=0.781 probe_ablated=0.418 random_ablated=0.805 | probe_drop=0.363 random_drop=-0.024
+[nec-gate] reproduce-gate (necessity) OK
+=== I. bundle (decode + steer + judged + judged-ablation -> one card) ===
+[bundle] inferred layer=16 from steer records
+[bundle] decodability n=320, efficacy=800, steering=800, ablation=150, multilayer=0, patching=0, leakage=no, deployment=no
+[bundle] -> examples/refusal_positive_control/out/bundle.json   (next: sieve audit --bundle examples/refusal_positive_control/out/bundle.json)
+=== J. audit -> verdict card ===
+[sieve] verdict: not_causally_sufficient · necessary
+[sieve] card: reports/refusal_qwen7b.md (+ refusal_qwen7b.json)
+[sieve] deployment report: reports/refusal_qwen7b.html (+ refusal_qwen7b.roc.svg)
+=== VERDICT ===
+verdict: not_causally_sufficient | label: not_causally_sufficient · necessary | status: ok
+=== REMOTE DONE ===
