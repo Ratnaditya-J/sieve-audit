@@ -5,6 +5,31 @@ All notable changes to SIEVE are recorded here. Format loosely follows
 version** (on every audit card) as the audit-compatibility contract, separate
 from the package version.
 
+## [Unreleased] — verbalizer faithfulness (branch `verbalizer-faithfulness`)
+
+### Added
+- **Verbalizer-faithfulness auditing**: SIEVE now audits activation
+  verbalizers (Patchscopes / LatentQA style) as first-class signals — the
+  claims are scalarized to `P(claim asserts Y)` and face the existing gates
+  (confabulation → `surface_confounded`, CoT-redundancy → Tier-2 leakage,
+  faithfulness → causal sufficiency). See
+  [`docs/verbalizer_faithfulness.md`](docs/verbalizer_faithfulness.md).
+- `VerbalizationEvidence` bundle section; when present with decodability, the
+  engine enforces claim-scores ≡ probe-scores (no bait-and-switch verdicts).
+- Named **`cot` span category** in the Tier-2 leakage gate, with its own delta
+  and matched random control: `cot_leaky` (CoT-parroting) vs `cot_survives`
+  (above-chance signal without the CoT — survival is earned, never defaulted).
+  Both surface in the card headline (`· cot-leaky` / `· survives-cot-removal`).
+- **Verbalizer adapter** (`adapters/verbalizer.py`): recorded-output path
+  (GPU-free) and a model path (Patchscopes-style identity readout →
+  claim-direction recovery → the existing HF-runner steering controls), with
+  two-scorer claim scalarization (`assert:lexical` / `assert:graded` or LLM
+  judges).
+- `sieve selftest --verbalizer`: four rigged scenarios (faithful /
+  confabulating / CoT-parroting / epiphenomenal) must return the rigged
+  verdict AND the rigged `cot` flags; regression-tested across seeds in
+  `tests/test_verbalizer.py`.
+
 ## [0.1.0] — unreleased (protocol v0.1)
 
 First working engine. Audits recorded **evidence bundles** (GPU-free,
