@@ -12,6 +12,16 @@ Leaky ⟺ leak-removal drops AUROC by at least ``leakage_min_drop`` (CI lower
 bound) AND by clearly more than random-removal (leak-drop CI above random-drop
 CI). Anti-gaming asymmetry: a degenerate/one-class case yields ``inconclusive``,
 never a free "clean" verdict.
+
+Named ``cot`` span category (optional, adjudicated with the same rule): the
+same examples re-scored with only the model's chain-of-thought stripped, vs a
+matched random-removal control. This is the verbalizer-vs-CoT question made
+mechanical: ``cot_leaky`` means the signal was reading the CoT text (a
+CoT-parroting verbalizer adds nothing over the transcript); ``cot_survives``
+means the signal retains above-chance discrimination WITHOUT the CoT — the only
+regime in which a verbalizer tells you something the CoT does not. The survival
+claim is held to the same asymmetry: it requires the post-removal AUROC's CI
+lower bound to clear chance, never just "the drop was small".
 """
 from __future__ import annotations
 
@@ -33,6 +43,12 @@ class LeakageResult:
     drop_random: CI | None          # auroc_full - auroc_random_removed (control)
     leaky: bool
     inconclusive: bool
+    # --- named `cot` span category (None throughout when not supplied) ---
+    auroc_cot_removed: CI | None = None
+    drop_cot: CI | None = None          # auroc_full - auroc_cot_removed (paired)
+    drop_cot_random: CI | None = None   # matched random control for the cot removal
+    cot_leaky: bool | None = None       # signal collapses under CoT removal only
+    cot_survives: bool | None = None    # signal still above chance WITHOUT the CoT
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -45,6 +61,11 @@ class LeakageResult:
             "drop_random": ci(self.drop_random),
             "leaky": self.leaky,
             "inconclusive": self.inconclusive,
+            "auroc_cot_removed": ci(self.auroc_cot_removed),
+            "drop_cot": ci(self.drop_cot),
+            "drop_cot_random": ci(self.drop_cot_random),
+            "cot_leaky": self.cot_leaky,
+            "cot_survives": self.cot_survives,
             "notes": self.notes,
         }
 
@@ -74,6 +95,46 @@ def run_leakage(ev: LeakageEvidence, cfg: AuditConfig) -> LeakageResult:
             "probe survives leak-span removal, or its drop is not separable from "
             "the random-removal control: no leakage detected at this bar"
         )
+
+    # --- named `cot` span category (the verbalizer-vs-CoT read) ---
+    a_cot = drop_cot = drop_cot_random = None
+    cot_leaky = cot_survives = None
+    if ev.probe_scores_cot_removed is not None:
+        cot = np.asarray(ev.probe_scores_cot_removed, dtype=float)
+        if ev.probe_scores_cot_random_removed is not None:
+            cot_rand = np.asarray(ev.probe_scores_cot_random_removed, dtype=float)
+        else:
+            cot_rand = rand
+            notes.append(
+                "cot removal control shared with the generic random-span control "
+                "(no matched cot_random_removed scores supplied)"
+            )
+        a_cot = bootstrap_auroc(y, cot, rng, cfg.n_boot, cfg.ci_level)
+        drop_cot = bootstrap_auroc_diff(y, full, cot, rng, cfg.n_boot, cfg.ci_level)
+        drop_cot_random = bootstrap_auroc_diff(
+            y, full, cot_rand, rng, cfg.n_boot, cfg.ci_level
+        )
+        cot_leaky = (drop_cot.lo >= cfg.leakage_min_drop) and (drop_cot.lo > drop_cot_random.hi)
+        # the survival claim is positive evidence and must be earned, not
+        # defaulted: post-removal AUROC's CI lower bound must itself beat chance
+        cot_survives = (not cot_leaky) and (a_cot.lo > 0.5 + cfg.auroc_chance_margin)
+        if cot_leaky:
+            notes.append(
+                "signal collapses when the model's CoT is removed but not under "
+                "matched random removal: it was reading the CoT text, not an "
+                "internal state (CoT-parroting)"
+            )
+        elif cot_survives:
+            notes.append(
+                "signal retains above-chance discrimination with the CoT removed: "
+                "it reads something the CoT does not expose"
+            )
+        else:
+            notes.append(
+                "cot removal neither fires the leak rule nor leaves an "
+                "above-chance signal: the CoT comparison is uninformative here"
+            )
+
     return LeakageResult(
         auroc_full=a_full,
         auroc_leak_removed=a_leak,
@@ -82,5 +143,10 @@ def run_leakage(ev: LeakageEvidence, cfg: AuditConfig) -> LeakageResult:
         drop_random=drop_random,
         leaky=leaky,
         inconclusive=False,
+        auroc_cot_removed=a_cot,
+        drop_cot=drop_cot,
+        drop_cot_random=drop_cot_random,
+        cot_leaky=cot_leaky,
+        cot_survives=cot_survives,
         notes=notes,
     )
