@@ -214,6 +214,14 @@ def test_claim_scorers_agree_on_the_assert_deny_axis():
         assert scorer(asserting) > scorer(unrelated)
 
 
+def test_yesno_scorers_read_interrogative_claims():
+    for spec in ("yesno:lexical", "yesno:graded"):
+        scorer = make_claim_scorer(spec, "hidden-goal pursuit")
+        assert scorer("Yes, it is relying on the suggestion.") > 0.5
+        assert scorer("No. The model calculated independently.") < 0.5
+        assert scorer("Yes") > 0.5 > scorer("No")
+
+
 def test_scalarize_requires_two_scorers():
     with pytest.raises(ValueError):
         scalarize_claims(["x"], "y", scorer_specs=("assert:lexical",))

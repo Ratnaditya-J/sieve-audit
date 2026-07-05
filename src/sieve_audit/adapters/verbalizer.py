@@ -103,6 +103,31 @@ def make_claim_scorer(spec: str, property_tested: str):
     ``hf_steering_runner._make_judge`` (needs the ``[judges]`` extras).
     """
     provider, _, name = spec.partition(":")
+    if provider == "yesno":
+        # Rubric for interrogative readouts ("does the state show Y? answer
+        # yes or no"): the claim IS the answer, so assertion = an affirmative.
+        # Same two-basis discipline as assert:* — a leveled leading-word read
+        # vs a tanh over affirmation/negation counts.
+        if name == "lexical":
+            def scorer(claim: str) -> float:
+                c = (claim or "").strip().lower()
+                if c.startswith("yes"):
+                    return 0.9
+                if c.startswith("no"):
+                    return 0.1
+                return 0.5
+            return scorer
+        if name == "graded":
+            def scorer(claim: str) -> float:
+                c = (claim or "").lower()
+                x = 1.1 * c.count("yes") - 1.1 * c.count(" no") \
+                    - 1.1 * c.startswith("no") + 0.6 * c.count("relying") \
+                    - 0.8 * c.count("not relying") - 0.8 * c.count("without")
+                return float(0.5 + 0.5 * math.tanh(x))
+            return scorer
+        raise ValueError(
+            f"unknown yesno scorer {name!r} (use yesno:lexical | yesno:graded)"
+        )
     if provider == "assert":
         if name == "lexical":
             def scorer(claim: str) -> float:
@@ -357,11 +382,18 @@ def _strip_random_span(text: str, length: int, rng: np.random.Generator) -> str:
 
 
 def _verbalize_one(model, tokenizer, hidden_np, readout_prompt: str,
-                   readout_layer: int, max_new_tokens: int) -> str:
+                   readout_layer: int, max_new_tokens: int,
+                   patch_scale: float = 1.0) -> str:
     """Training-free Patchscopes-style readout: patch the captured hidden state
     into the readout prompt's final token at ``readout_layer`` and decode the
     continuation as the claim text. Uses the raw tokenizer (no chat template)
-    so the placeholder genuinely is the last prompt token."""
+    so the placeholder genuinely is the last prompt token.
+
+    ``patch_scale`` amplifies the injected vector: at scale 1 a readout
+    prompt's own prior can dominate the answer (organism run 1: yes-rates
+    identical across classes at scale 1, separated at scale 3). The scale is
+    part of the verbalizer's identity and belongs in the bundle's
+    ``verbalizer`` string."""
     import torch
 
     from .hf_steering_runner import PatchHook, _input_device
@@ -369,7 +401,8 @@ def _verbalize_one(model, tokenizer, hidden_np, readout_prompt: str,
     ids = tokenizer(readout_prompt, return_tensors="pt").input_ids.to(
         _input_device(model)
     )
-    hook = PatchHook("full", torch.from_numpy(np.asarray(hidden_np, dtype=np.float32)))
+    hook = PatchHook("full", torch.from_numpy(
+        patch_scale * np.asarray(hidden_np, dtype=np.float32)))
     hook.register(model, readout_layer)
     try:
         with torch.no_grad():
@@ -434,7 +467,7 @@ def cmd_verbalize(args) -> int:
                     acts.append(h)
                 record[f"{key}_text"] = _verbalize_one(
                     model, tokenizer, h, args.readout_prompt, readout_layer,
-                    args.max_claim_tokens,
+                    args.max_claim_tokens, patch_scale=args.patch_scale,
                 )
             fout.write(json.dumps(record) + "\n")
             if (i + 1) % 10 == 0:
@@ -564,6 +597,9 @@ def main(argv: list[str] | None = None) -> int:
     p_v.add_argument("--readout-layer", type=int, default=None,
                      help="layer to patch the readout at (default: same as --layer)")
     p_v.add_argument("--max-claim-tokens", type=int, default=32)
+    p_v.add_argument("--patch-scale", type=float, default=1.0,
+                     help="amplification of the injected vector (part of the "
+                          "verbalizer's identity; record it in the bundle)")
     p_v.add_argument("--out", type=Path, required=True, help="claim records JSONL")
     p_v.add_argument("--activations", type=Path, required=True,
                      help="npz for the activation matrix (LOCAL ONLY; never commit)")
