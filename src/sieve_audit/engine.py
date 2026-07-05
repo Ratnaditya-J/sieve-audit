@@ -172,6 +172,25 @@ def run_audit(
     except ValueError as exc:
         hard_gaps.append(f"bundle validation failed: {exc}")
 
+    # When the audited signal is a verbalizer's claims, the decodability scores
+    # must BE those claim scores — otherwise the verdict would be issued about
+    # one signal and quoted for another (bait-and-switch).
+    if bundle.verbalization is not None and bundle.decodability is not None:
+        verb, dec = bundle.verbalization, bundle.decodability
+        if list(verb.verbalizer_claim_scores) != list(dec.probe_scores):
+            hard_gaps.append(
+                "verbalization claim scores differ from the audited decodability "
+                "probe_scores: the verdict would not be about the verbalizer's claims"
+            )
+        elif len(verb.labels) != len(dec.labels) or any(
+            vl is not None and vl != dl
+            for vl, dl in zip(verb.labels, dec.labels)
+        ):
+            hard_gaps.append(
+                "verbalization labels differ from the decodability labels: "
+                "the two sections do not describe the same examples"
+            )
+
     decod = efficacy = controls = None
     if bundle.decodability is not None:
         try:
