@@ -173,7 +173,7 @@ def run_audit(
         hard_gaps.append(f"bundle validation failed: {exc}")
 
     # When the audited signal is a verbalizer's claims, the decodability scores
-    # must BE those claim scores — otherwise the verdict would be issued about
+    # must BE those claim scores - otherwise the verdict would be issued about
     # one signal and quoted for another (bait-and-switch).
     if bundle.verbalization is not None and bundle.decodability is not None:
         verb, dec = bundle.verbalization, bundle.decodability

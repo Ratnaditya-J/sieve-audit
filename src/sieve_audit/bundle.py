@@ -199,12 +199,12 @@ class LeakageEvidence:
     Optional named ``cot`` span category (the verbalizer-vs-CoT question): the
     same examples re-scored with ONLY the model's chain-of-thought stripped,
     reported as its own delta. If the signal collapses under CoT removal but not
-    under the matched random removal, it was reading the CoT text — it adds
+    under the matched random removal, it was reading the CoT text - it adds
     nothing over reading the transcript. If it survives, it is reading
     something the CoT does not expose.
     - ``probe_scores_cot_removed``: the model's CoT/verbalized reasoning removed,
     - ``probe_scores_cot_random_removed``: a random span of matched length
-      removed — the control for the CoT removal specifically. If absent, the
+      removed - the control for the CoT removal specifically. If absent, the
       generic ``probe_scores_random_removed`` control is used (and noted).
     """
 
@@ -245,7 +245,7 @@ class VerbalizationEvidence:
     model and emits a natural-language claim about a behavioral property Y. Its
     validity threat is confabulation: reproducing its own priors or paraphrasing
     the input/CoT text rather than reading the internals (arXiv 2509.13316).
-    SIEVE catches that with the machinery it already has — the adapter
+    SIEVE catches that with the machinery it already has - the adapter
     scalarizes each claim into P(claim asserts Y) and feeds those scores through
     the decodability + surface-baseline + Tier-2 leakage gates unchanged:
 
@@ -256,7 +256,7 @@ class VerbalizationEvidence:
     - causal stage: a direction recovered from the CLAIMS faces the full
       matched-control steering suite.
 
-    This record documents what the verbalizer read and claimed — scores and
+    This record documents what the verbalizer read and claimed - scores and
     strings only, never raw activations. ``verbalizer_claim_scores`` must equal
     the bundle's decodability ``probe_scores`` (the engine enforces it), so the
     verdict provably concerns the verbalizer's claims.
@@ -273,7 +273,7 @@ class VerbalizationEvidence:
     verbalizer_claim_scores: list[float]  # P(claim asserts Y | activation), each in [0, 1]
     families: list[str]          # prompt-family id per example (held-out splits)
     # Explicit attestation that no listed example tuned the verbalizer or its
-    # claim scorer — mirrors probe_scores_out_of_sample. Defaults to False.
+    # claim scorer - mirrors probe_scores_out_of_sample. Defaults to False.
     claim_scores_out_of_sample: bool = False
 
     def __post_init__(self) -> None:

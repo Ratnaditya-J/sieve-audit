@@ -18,7 +18,7 @@ same examples re-scored with only the model's chain-of-thought stripped, vs a
 matched random-removal control. This is the verbalizer-vs-CoT question made
 mechanical: ``cot_leaky`` means the signal was reading the CoT text (a
 CoT-parroting verbalizer adds nothing over the transcript); ``cot_survives``
-means the signal retains above-chance discrimination WITHOUT the CoT — the only
+means the signal retains above-chance discrimination WITHOUT the CoT - the only
 regime in which a verbalizer tells you something the CoT does not. The survival
 claim is held to the same asymmetry: it requires the post-removal AUROC's CI
 lower bound to clear chance, never just "the drop was small".

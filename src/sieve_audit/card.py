@@ -149,7 +149,7 @@ def _headline_label(verdict, status: str, necessity, leakage=None, multilayer=No
     leak = " · leaky" if (leakage is not None and leakage.leaky) else ""
     # the named cot span category: parroting is flagged like leakage; survival
     # is the verbalizer-vs-CoT headline finding and is surfaced only when earned
-    # (post-removal AUROC above chance — see leakage.py)
+    # (post-removal AUROC above chance - see leakage.py)
     if leakage is not None and leakage.cot_leaky:
         leak += " · cot-leaky"
     elif leakage is not None and leakage.cot_survives:
@@ -372,7 +372,7 @@ def build_card(
             verbalization_risks.append(
                 "The steered direction was recovered from the verbalizer's CLAIMS "
                 "(mean-difference of target-model activations grouped by "
-                "asserts-Y vs not) — 'the direction that predicts what the "
+                "asserts-Y vs not) - 'the direction that predicts what the "
                 "verbalizer says', not a ground-truth readout of the verbalizer's "
                 "mechanism. Causal verdicts are bounded to that recovery method; "
                 "a negative verdict does NOT prove the verbalizer confabulated "
@@ -395,7 +395,7 @@ def build_card(
             verbalization_risks.append(
                 "COT-PARROTING: the verbalizer's claim signal collapses when the "
                 "model's CoT is removed (and more than under matched random "
-                "removal) — the claims restate the CoT, adding nothing over "
+                "removal) - the claims restate the CoT, adding nothing over "
                 "reading the transcript."
             )
 

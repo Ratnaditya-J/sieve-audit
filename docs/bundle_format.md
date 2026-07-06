@@ -91,7 +91,7 @@ Requirements:
   flagged as duplication;
 - no duplicate `(arm, alpha, prompt_id)` records (retakes are rejected).
 
-## `leakage` — Tier-2 span-removal check (optional)
+## `leakage` - Tier-2 span-removal check (optional)
 
 ```jsonc
 {
@@ -109,11 +109,11 @@ Requirements:
 control. The `cot` category is adjudicated with the same rule and reported as
 its own delta: `cot_leaky` means the signal was reading the CoT text
 (CoT-parroting); `cot_survives` means it retains **above-chance** (CI lower
-bound) discrimination without the CoT — the only regime in which the signal
+bound) discrimination without the CoT - the only regime in which the signal
 tells you something the CoT does not. If `probe_scores_cot_random_removed` is
 absent, the generic random control is used and the sharing is noted.
 
-## `verbalization` — the audited signal is an activation verbalizer's claims (optional)
+## `verbalization` - the audited signal is an activation verbalizer's claims (optional)
 
 ```jsonc
 {

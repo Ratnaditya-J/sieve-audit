@@ -302,7 +302,7 @@ def _verb_examples(
 
     Modes rig where the claims come from:
     - ``internals``: claims track the label through the activations; removing
-      the CoT changes nothing (a faithful — or at least CoT-independent — read).
+      the CoT changes nothing (a faithful - or at least CoT-independent - read).
     - ``prompt``: claims are a function of the raw prompt text alone (text
       inversion); the label leaks into prompt length, so a length baseline
       matches the verbalizer.
@@ -426,7 +426,7 @@ def scenario_verbalizer_cot_parroting(seed: int = 0, n: int = 240) -> EvidenceBu
 
 
 def scenario_verbalizer_epiphenomenal(seed: int = 0, n: int = 240) -> EvidenceBundle:
-    """Claims are decodable, survive surface baselines and CoT removal — but
+    """Claims are decodable, survive surface baselines and CoT removal - but
     steering the claim-direction moves behavior no more than the controls."""
     rng = np.random.default_rng(seed)
     return _verb_bundle(

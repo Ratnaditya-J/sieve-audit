@@ -2,14 +2,14 @@
 
 Audits whether a verbalizer (Patchscopes / LatentQA / activation-explainer
 style) that translates a hidden state at (layer L, token position t) into an
-English claim about property Y is *reading the internals* — or confabulating.
+English claim about property Y is *reading the internals* - or confabulating.
 The validity threats (arXiv 2509.13316) map onto gates SIEVE already has; this
 adapter only converts verbalizer runs into the bundle those gates consume:
 
 - **text inversion / surface confound**: each claim is scalarized into
   P(claim asserts Y) and fed as the decodability signal; if a TF-IDF/length
   baseline on the raw prompt text predicts the claims as well as the verbalizer
-  does, the verdict is ``surface_confounded`` — no new machinery.
+  does, the verdict is ``surface_confounded`` - no new machinery.
 - **CoT-redundancy** (the research question): the claims re-scored with the
   model's chain-of-thought stripped populate the Tier-2 leakage gate's named
   ``cot`` span category (leakage.py), with a matched random-removal control.
@@ -17,7 +17,7 @@ adapter only converts verbalizer runs into the bundle those gates consume:
   = it reads something the CoT does not expose.
 - **causal stage**: the direction that predicts what the verbalizer *says*
   (mean-diff of target-model activations grouped by asserts-Y vs not, z-scored,
-  unit-norm — same convention as ``hf_steering_runner._probe_direction``) is
+  unit-norm - same convention as ``hf_steering_runner._probe_direction``) is
   saved in the runner's vectors.npz format and faces the full matched-control
   steering suite (probe/random/orthogonal/wrong_layer) unchanged. This is the
   honest default, and its limitation is printed on the card: a negative causal
@@ -28,13 +28,13 @@ Two entry paths, mirroring ``parrack_b2w`` (recorded artifacts, GPU-free) and
 ``hf_steering_runner`` (model access, ``[runner]`` extras):
 
 1. **Recorded outputs** (``build_bundle_from_records`` / ``bundle``): JSONL of
-   ``{prompt, cot, family, label, claim_text|claim_score, ...}`` records —
-   optionally with re-run scores under cot-removed / random-removed inputs —
+   ``{prompt, cot, family, label, claim_text|claim_score, ...}`` records -
+   optionally with re-run scores under cot-removed / random-removed inputs -
    becomes a decodability + verbalization + leakage bundle.
 2. **From a model** (``verbalize`` -> ``vectors`` -> hf runner ``steer``/
    ``judge`` -> ``bundle``): runs a training-free Patchscopes-style readout
    over the target model's activations, writes claim records + the activation
-   matrix (LOCAL ONLY — activations are never committed, see .gitignore), then
+   matrix (LOCAL ONLY - activations are never committed, see .gitignore), then
    recovers the claim direction for the causal stage.
 
 Claim scalarization reuses the two-judge discipline: at least two scorers,
@@ -97,7 +97,7 @@ def make_claim_scorer(spec: str, property_tested: str):
 
     ``assert:lexical`` and ``assert:graded`` are deterministic total functions
     on distinct feature bases (leveled mention/negation reading vs a tanh over
-    cue counts) — they agree on the assert/deny axis without being duplicates,
+    cue counts) - they agree on the assert/deny axis without being duplicates,
     mirroring the ``refusal:lexical`` / ``refusal:graded`` pair in the HF
     runner. Any other spec is treated as an LLM judge via
     ``hf_steering_runner._make_judge`` (needs the ``[judges]`` extras).
@@ -106,7 +106,7 @@ def make_claim_scorer(spec: str, property_tested: str):
     if provider == "yesno":
         # Rubric for interrogative readouts ("does the state show Y? answer
         # yes or no"): the claim IS the answer, so assertion = an affirmative.
-        # Same two-basis discipline as assert:* — a leveled leading-word read
+        # Same two-basis discipline as assert:* - a leveled leading-word read
         # vs a tanh over affirmation/negation counts.
         if name == "lexical":
             def scorer(claim: str) -> float:
@@ -189,7 +189,7 @@ def scalarize_claims(
 
 
 # ---------------------------------------------------------------------------
-# direction recovery (the causal stage's input — the one non-mechanical choice)
+# direction recovery (the causal stage's input - the one non-mechanical choice)
 # ---------------------------------------------------------------------------
 
 
@@ -199,7 +199,7 @@ def recover_claim_direction(
     """The direction that predicts what the verbalizer says.
 
     Mean-difference of z-scored target-model activations grouped by the
-    verbalizer's CLAIM (asserts-Y vs not), unit norm — the same convention as
+    verbalizer's CLAIM (asserts-Y vs not), unit norm - the same convention as
     ``hf_steering_runner._probe_direction`` but with the verbalizer's claim in
     place of the ground-truth label. Steering it with the full matched-control
     suite tests whether the thing the verbalizer *talks about* is causally
@@ -270,10 +270,10 @@ def build_bundle_from_records(
     (already in [0,1]); ``label`` (0/1) where ground truth exists. Optional
     re-run conditions for the Tier-2 gate, as ``*_score`` or ``*_text``:
 
-    - ``claim_cot_removed``    — verbalizer re-run with the CoT stripped,
-    - ``claim_cot_random_removed`` — matched-length random span stripped
+    - ``claim_cot_removed``    - verbalizer re-run with the CoT stripped,
+    - ``claim_cot_random_removed`` - matched-length random span stripped
       (the off-distribution control the leakage gate requires),
-    - ``claim_leak_removed`` / ``claim_random_removed`` — generic leak spans,
+    - ``claim_leak_removed`` / ``claim_random_removed`` - generic leak spans,
       for auditees with giveaway text beyond the CoT; the CoT scores stand in
       for the generic leak condition when these are absent (for a verbalizer,
       the CoT *is* the canonical giveaway span).
@@ -373,7 +373,7 @@ def _strip_span(text: str, span: str) -> str:
 
 
 def _strip_random_span(text: str, length: int, rng: np.random.Generator) -> str:
-    """Remove a random contiguous span of ``length`` chars — the matched
+    """Remove a random contiguous span of ``length`` chars - the matched
     off-distribution control for the cot removal."""
     if length <= 0 or length >= len(text):
         return text
@@ -420,7 +420,7 @@ def _verbalize_one(model, tokenizer, hidden_np, readout_prompt: str,
 def cmd_verbalize(args) -> int:
     """Run the verbalizer over the target model's activations.
 
-    Prompts JSONL: ``{prompt_id, text, family, label?, cot?}`` — ``text`` is the
+    Prompts JSONL: ``{prompt_id, text, family, label?, cot?}`` - ``text`` is the
     full input the target model saw (including its CoT where applicable) and
     ``cot`` the exact CoT substring within it. For each example the readout runs
     on three input variants (full / cot-removed / matched-random-removed) so the
