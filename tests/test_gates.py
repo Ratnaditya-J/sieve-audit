@@ -217,3 +217,27 @@ def test_floor_wording_accurate_for_near_universal_behavior():
     assert "did not occur" not in note
     assert "near-absent" not in note
     assert "one-sided" in note                # direction-neutral, accurate wording
+
+
+def test_activation_probes_read_a_planted_direction():
+    """Both activation probes (mean-diff and the stronger logistic regression)
+    must recover a planted linear signal on held-out data. (Which one is
+    stronger is data-dependent - on isotropic synthetics mean-diff is near
+    Bayes-optimal; the run-5 Gate 0 checks the ordering on real activations.)"""
+    import numpy as np
+
+    from sieve_audit.decodability import ACTIVATION_PROBES, fit_activation_probe_scores
+    from sieve_audit.stats import auroc
+
+    rng = np.random.default_rng(0)
+    d, n = 48, 400
+    w = rng.normal(size=d)
+    w /= np.linalg.norm(w)
+    y = rng.integers(0, 2, size=n)
+    X = rng.normal(size=(n, d)) + 2.5 * y[:, None] * w
+    tr, te = slice(0, 300), slice(300, n)
+    scores = {}
+    for name in ACTIVATION_PROBES:
+        s = fit_activation_probe_scores(name, X[tr], y[tr], X[te], seed=0)
+        scores[name] = auroc(y[te], s)
+        assert scores[name] > 0.9, (name, scores[name])
