@@ -143,6 +143,47 @@ def _held_out_baseline_scores(
     return scores, scheme, notes, violations
 
 
+ACTIVATION_PROBES = ("mean_diff", "logistic_regression")
+
+
+def fit_activation_probe_scores(
+    name: str,
+    train_X: "np.ndarray",
+    train_labels: "np.ndarray",
+    eval_X: "np.ndarray",
+    seed: int = 0,
+) -> "np.ndarray":
+    """Train one activation probe on the train split, score the eval split.
+
+    The activation-side counterpart of ``baselines.fit_baseline_scores``:
+    - ``mean_diff``: class mean-difference of z-scored activations, unit norm
+      (the companion-paper CAA convention; score = w.h);
+    - ``logistic_regression``: standardized features + L2 logistic regression
+      - a stronger, graded linear readout (organism run 4 falsified the
+      assumption that mean-diff is the linear ceiling).
+
+    Both are fit fresh per call, so leave-one-family-out evaluation carries no
+    train/test leakage by construction.
+    """
+    if name == "mean_diff":
+        mu, sd = train_X.mean(0), train_X.std(0) + 1e-8
+        Xz = (train_X - mu) / sd
+        w = Xz[train_labels == 1].mean(0) - Xz[train_labels == 0].mean(0)
+        w = w / (np.linalg.norm(w) + 1e-12)
+        return ((eval_X - mu) / sd) @ w
+    if name == "logistic_regression":
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.pipeline import make_pipeline
+        from sklearn.preprocessing import StandardScaler
+
+        model = make_pipeline(
+            StandardScaler(), LogisticRegression(max_iter=2000, random_state=seed)
+        )
+        model.fit(train_X, train_labels)
+        return model.predict_proba(eval_X)[:, 1]
+    raise ValueError(f"unknown activation probe: {name!r}")
+
+
 def run_decodability(ev: DecodabilityEvidence, cfg: AuditConfig) -> DecodabilityResult:
     labels = np.asarray(ev.labels)
     probe_scores = np.asarray(ev.probe_scores, dtype=float)
