@@ -417,8 +417,151 @@ def _verbalize_one(model, tokenizer, hidden_np, readout_prompt: str,
     return tokenizer.decode(out[0, ids.shape[1]:], skip_special_tokens=True)
 
 
+# ---------------------------------------------------------------------------
+# pluggable verbalizers: one protocol, many readouts, ONE adjudicator
+#
+# The harness (three input variants -> Tier-2 cot gate, activation matrix ->
+# direction recovery, bundle -> SIEVE gates) never changes when the verbalizer
+# does; that invariance is what makes a head-to-head between readouts
+# apples-to-apples. A verbalizer is anything with a ``name`` (lands in the
+# bundle's ``verbalizer`` field) and ``verbalize(hidden_np) -> str``.
+# ---------------------------------------------------------------------------
+
+
+class PatchscopesVerbalizer:
+    """Training-free readout: patch-and-generate (wraps ``_verbalize_one``)."""
+
+    def __init__(self, model, tokenizer, readout_prompt: str,
+                 readout_layer: int, max_new_tokens: int,
+                 patch_scale: float = 1.0):
+        self._model = model
+        self._tokenizer = tokenizer
+        self.readout_prompt = readout_prompt
+        self.readout_layer = readout_layer
+        self.max_new_tokens = max_new_tokens
+        self.patch_scale = patch_scale
+        self.name = f"patchscopes@L{readout_layer},scale{patch_scale:g}"
+        # no training data: the leakage firewall has nothing to check
+        self.train_families: frozenset[str] = frozenset()
+
+    def verbalize(self, hidden_np) -> str:
+        return _verbalize_one(
+            self._model, self._tokenizer, hidden_np, self.readout_prompt,
+            self.readout_layer, self.max_new_tokens,
+            patch_scale=self.patch_scale,
+        )
+
+
+class LatentQAVerbalizer:
+    """Trained decoder readout (LatentQA-style, arXiv 2412.08686 lineage).
+
+    The captured subject activation is injected (PatchHook, scaled) into a
+    DECODER LM carrying a trained LoRA adapter, at the final token of a fixed
+    question prompt; the generated answer is the claim. The decoder defaults
+    to the subject model itself (same weights + adapter) so no second model's
+    parametric priors sit between the activation and the claim; an
+    Activation-Oracle-style cross-model checkpoint simply names a different
+    ``decoder_model`` in its metadata.
+
+    A checkpoint directory holds the peft adapter plus ``metadata.json``:
+    ``{question, inject_layer, patch_scale, train_families, subject_model,
+    layer, decoder_model, seed}``. ``train_families`` feeds the train/eval
+    leakage firewall: verbalizing any example from a family the decoder
+    trained on is refused (see ``assert_family_firewall``) - without that,
+    ``claim_scores_out_of_sample`` would be attested falsely and every
+    positive verdict void.
+    """
+
+    def __init__(self, decoder, tokenizer, metadata: dict, max_new_tokens: int = 8):
+        self._decoder = decoder
+        self._tokenizer = tokenizer
+        self.metadata = metadata
+        self.question = metadata["question"]
+        self.inject_layer = int(metadata["inject_layer"])
+        self.patch_scale = float(metadata["patch_scale"])
+        self.max_new_tokens = max_new_tokens
+        self.train_families = frozenset(metadata["train_families"])
+        base = metadata.get("decoder_model", metadata["subject_model"])
+        kind = ("latentqa" if base == metadata["subject_model"]
+                else "activation-oracle")
+        self.name = (f"{kind}:{base}@inject-L{self.inject_layer},"
+                     f"scale{self.patch_scale:g},ckpt-{metadata.get('checkpoint_id', 'local')}")
+
+    @classmethod
+    def load(cls, checkpoint_dir: str | Path, dtype: str = "bfloat16",
+             max_new_tokens: int = 8) -> "LatentQAVerbalizer":
+        """Load metadata + decoder base + peft adapter from a checkpoint dir."""
+        checkpoint_dir = Path(checkpoint_dir)
+        metadata = json.loads((checkpoint_dir / "metadata.json").read_text())
+        try:
+            import torch
+            from peft import PeftModel
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ImportError as exc:  # pragma: no cover
+            raise SystemExit(
+                "LatentQAVerbalizer needs the runner extras plus peft: "
+                "pip install 'sieve-audit[runner]' peft"
+            ) from exc
+        base = metadata.get("decoder_model", metadata["subject_model"])
+        torch_dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16,
+                       "float32": torch.float32}[dtype]
+        tokenizer = AutoTokenizer.from_pretrained(base, trust_remote_code=True)
+        decoder = AutoModelForCausalLM.from_pretrained(
+            base, torch_dtype=torch_dtype, device_map="auto",
+            trust_remote_code=True,
+        )
+        decoder = PeftModel.from_pretrained(decoder, str(checkpoint_dir))
+        decoder.eval()
+        return cls(decoder, tokenizer, metadata, max_new_tokens=max_new_tokens)
+
+    def verbalize(self, hidden_np) -> str:
+        return _verbalize_one(
+            self._decoder, self._tokenizer, hidden_np, self.question,
+            self.inject_layer, self.max_new_tokens,
+            patch_scale=self.patch_scale,
+        )
+
+
+def assert_family_firewall(prompt_families: set[str],
+                           train_families: frozenset[str]) -> None:
+    """The train/eval leakage firewall, as an assertion rather than a comment.
+
+    A trained verbalizer must never be audited on a family it trained on:
+    the audit's leave-one-family-out split and the
+    ``claim_scores_out_of_sample`` attestation are both false otherwise, and
+    every positive verdict downstream would be void.
+    """
+    overlap = sorted(set(prompt_families) & set(train_families))
+    if overlap:
+        raise ValueError(
+            f"train/eval leakage: audit families {overlap} appear in the "
+            "verbalizer's training families; refusing to produce claims "
+            "(claim_scores_out_of_sample would be attested falsely)"
+        )
+
+
+def make_verbalizer(args, model, tokenizer):
+    """CLI factory: ``--verbalizer patchscopes|latentqa|activation-oracle``."""
+    kind = getattr(args, "verbalizer", "patchscopes")
+    if kind == "patchscopes":
+        readout_layer = (args.readout_layer if args.readout_layer is not None
+                         else args.layer)
+        return PatchscopesVerbalizer(
+            model, tokenizer, args.readout_prompt, readout_layer,
+            args.max_claim_tokens, patch_scale=args.patch_scale,
+        )
+    if kind in ("latentqa", "activation-oracle"):
+        if not getattr(args, "decoder_checkpoint", None):
+            raise SystemExit(f"--verbalizer {kind} requires --decoder-checkpoint")
+        return LatentQAVerbalizer.load(
+            args.decoder_checkpoint, dtype=args.dtype,
+            max_new_tokens=args.max_claim_tokens,
+        )
+    raise SystemExit(f"unknown verbalizer {kind!r}")
+
+
 def cmd_verbalize(args) -> int:
-    """Run the verbalizer over the target model's activations.
+    """Run the selected verbalizer over the target model's activations.
 
     Prompts JSONL: ``{prompt_id, text, family, label?, cot?}`` - ``text`` is the
     full input the target model saw (including its CoT where applicable) and
@@ -426,6 +569,10 @@ def cmd_verbalize(args) -> int:
     on three input variants (full / cot-removed / matched-random-removed) so the
     Tier-2 ``cot`` gate has its evidence; the full-variant activation matrix is
     saved for direction recovery. Activations stay LOCAL (never commit them).
+
+    Activations are always captured from the PLAIN subject model; a trained
+    verbalizer decodes them with its own (adapter-carrying) instance, so the
+    subject's residual stream is never contaminated by decoder weights.
     """
     from .hf_steering_runner import (
         _hidden_at_layer,
@@ -436,13 +583,19 @@ def cmd_verbalize(args) -> int:
     model, tokenizer = _load_model(args)
     prompts = _load_labeled_prompts(args.prompts)
     rng = np.random.default_rng(args.seed)
-    readout_layer = args.readout_layer if args.readout_layer is not None else args.layer
+
+    verbalizer = make_verbalizer(args, model, tokenizer)
+    # the leakage firewall fires BEFORE any claim is produced
+    assert_family_firewall(
+        {str(p.get("family", "default")) for p in prompts},
+        verbalizer.train_families,
+    )
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     acts: list[np.ndarray] = []
     print(f"[verbalize] {len(prompts)} prompts, layer {args.layer} "
-          f"({args.token_selection}), readout at layer {readout_layer}")
+          f"({args.token_selection}), verbalizer {verbalizer.name}")
     with out.open("w") as fout:
         for i, p in enumerate(prompts):
             text = p["text"]
@@ -459,16 +612,14 @@ def cmd_verbalize(args) -> int:
                 "cot": cot,
                 "family": str(p.get("family", "default")),
                 "label": p.get("label"),
+                "verbalizer": verbalizer.name,
             }
             for key, variant_text in variants.items():
                 h = _hidden_at_layer(model, tokenizer, variant_text, args.layer,
                                      pool=args.token_selection)
                 if key == "claim":
                     acts.append(h)
-                record[f"{key}_text"] = _verbalize_one(
-                    model, tokenizer, h, args.readout_prompt, readout_layer,
-                    args.max_claim_tokens, patch_scale=args.patch_scale,
-                )
+                record[f"{key}_text"] = verbalizer.verbalize(h)
             fout.write(json.dumps(record) + "\n")
             if (i + 1) % 10 == 0:
                 print(f"  {i + 1}/{len(prompts)}")
@@ -600,6 +751,13 @@ def main(argv: list[str] | None = None) -> int:
     p_v.add_argument("--patch-scale", type=float, default=1.0,
                      help="amplification of the injected vector (part of the "
                           "verbalizer's identity; record it in the bundle)")
+    p_v.add_argument("--verbalizer", default="patchscopes",
+                     choices=["patchscopes", "latentqa", "activation-oracle"],
+                     help="which readout produces the claims; the harness "
+                          "around it is identical for all")
+    p_v.add_argument("--decoder-checkpoint", type=Path, default=None,
+                     help="trained decoder checkpoint dir (metadata.json + "
+                          "peft adapter); required for latentqa/activation-oracle")
     p_v.add_argument("--out", type=Path, required=True, help="claim records JSONL")
     p_v.add_argument("--activations", type=Path, required=True,
                      help="npz for the activation matrix (LOCAL ONLY; never commit)")

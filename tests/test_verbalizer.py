@@ -14,6 +14,9 @@ import pytest
 from sieve_audit import AuditConfig, run_audit
 from sieve_audit.bundle import EvidenceBundle, LeakageEvidence, VerbalizationEvidence
 from sieve_audit.adapters.verbalizer import (
+    LatentQAVerbalizer,
+    PatchscopesVerbalizer,
+    assert_family_firewall,
     build_bundle_from_records,
     make_claim_scorer,
     recover_claim_direction,
@@ -281,6 +284,42 @@ def test_recorded_path_label_free_skips_decodability():
     bundle = _build(records)
     assert bundle.decodability is None and bundle.leakage is None
     assert bundle.verbalization.labels == [None] * 24
+
+
+def test_verbalizer_protocol_conformance():
+    """Both implementations expose the same seam: name, train_families,
+    verbalize(hidden)->str - so swapping the readout cannot touch the harness."""
+    ps = PatchscopesVerbalizer(model=None, tokenizer=None, readout_prompt="?",
+                               readout_layer=3, max_new_tokens=8, patch_scale=3.0)
+    assert ps.name == "patchscopes@L3,scale3"
+    assert ps.train_families == frozenset()
+
+    meta = {
+        "question": "Is it? ?", "inject_layer": 2, "patch_scale": 3.0,
+        "train_families": ["peer", "metadata"], "subject_model": "m",
+        "decoder_model": "m", "seed": 0,
+    }
+    lq = LatentQAVerbalizer(decoder=None, tokenizer=None, metadata=meta)
+    assert lq.name.startswith("latentqa:m@inject-L2,scale3")
+    assert lq.train_families == frozenset({"peer", "metadata"})
+    # a cross-model checkpoint identifies itself as the activation-oracle slot
+    oracle = LatentQAVerbalizer(
+        decoder=None, tokenizer=None,
+        metadata={**meta, "decoder_model": "other/decoder"},
+    )
+    assert oracle.name.startswith("activation-oracle:other/decoder@")
+    for v in (ps, lq):
+        assert callable(v.verbalize)
+
+
+def test_family_firewall_fires_on_rigged_overlap():
+    """The train/eval leakage firewall is an assertion, not a comment: a
+    trained decoder audited on a family it trained on is refused outright."""
+    assert_family_firewall({"professor", "code_comment"}, frozenset({"peer"}))
+    with pytest.raises(ValueError, match="train/eval leakage"):
+        assert_family_firewall({"professor", "peer"}, frozenset({"peer", "metadata"}))
+    # the training-free readout has no training data: nothing to fire
+    assert_family_firewall({"any", "family"}, frozenset())
 
 
 def test_direction_recovery_finds_the_claim_direction():
