@@ -147,6 +147,13 @@ def _headline_label(verdict, status: str, necessity, leakage=None, multilayer=No
     necessity test reached a conclusion."""
     base = verdict.value if verdict is not None else status
     leak = " · leaky" if (leakage is not None and leakage.leaky) else ""
+    # the named cot span category: parroting is flagged like leakage; survival
+    # is the verbalizer-vs-CoT headline finding and is surfaced only when earned
+    # (post-removal AUROC above chance - see leakage.py)
+    if leakage is not None and leakage.cot_leaky:
+        leak += " · cot-leaky"
+    elif leakage is not None and leakage.cot_survives:
+        leak += " · survives-cot-removal"
     nec = _necessity_phrase(necessity, multilayer)
     if nec is None:
         return base + leak
@@ -356,6 +363,42 @@ def build_card(
                     "runs through — necessity/sufficiency can still mislead a monitor."
                 )
 
+    # --- verbalizer-audit annotations ---
+    verbalization_claims: list[str] = []
+    verbalization_risks: list[str] = []
+    if bundle.verbalization is not None:
+        verb = bundle.verbalization
+        if bundle.steering or bundle.efficacy:
+            verbalization_risks.append(
+                "The steered direction was recovered from the verbalizer's CLAIMS "
+                "(mean-difference of target-model activations grouped by "
+                "asserts-Y vs not) - 'the direction that predicts what the "
+                "verbalizer says', not a ground-truth readout of the verbalizer's "
+                "mechanism. Causal verdicts are bounded to that recovery method; "
+                "a negative verdict does NOT prove the verbalizer confabulated "
+                "(distributed/multi-layer mechanisms are untested)."
+            )
+        if leakage is None or leakage.cot_leaky is None:
+            verbalization_risks.append(
+                "CoT-redundancy untested: no `cot` span-removal evidence was "
+                "supplied, so whether the verbalizer's claims add anything over "
+                "reading the CoT is unknown."
+            )
+        if leakage is not None and leakage.cot_survives:
+            verbalization_claims.append(
+                "Under {scope}, the verbalizer's claims retain above-chance "
+                "discrimination with the model's CoT removed (and drop no more "
+                "than a matched random-removal control): the claims are not "
+                "merely reading the CoT text.".format(scope=scope)
+            )
+        if leakage is not None and leakage.cot_leaky:
+            verbalization_risks.append(
+                "COT-PARROTING: the verbalizer's claim signal collapses when the "
+                "model's CoT is removed (and more than under matched random "
+                "removal) - the claims restate the CoT, adding nothing over "
+                "reading the transcript."
+            )
+
     interventions_str = ", ".join(tested_interventions) or "none (causal stage not run)"
     config_hash = _canonical_hash({"config": cfg.to_dict(), "protocol_version": "0.1"})
     bundle_hash = _canonical_hash(bundle.to_dict())
@@ -395,6 +438,17 @@ def build_card(
         diagnostics["leakage"] = leakage.to_dict()
     if oracle is not None:
         diagnostics["oracle"] = oracle.to_dict()
+    if bundle.verbalization is not None:
+        verb = bundle.verbalization
+        diagnostics["verbalization"] = {
+            "target_model": verb.target_model,
+            "verbalizer": verb.verbalizer,
+            "layer": verb.layer,
+            "token_selection": verb.token_selection,
+            "property_tested": verb.property_tested,
+            "n_examples": len(verb.texts),
+            "claim_scores_out_of_sample": verb.claim_scores_out_of_sample,
+        }
     if deployment is not None:
         diagnostics["deployment"] = deployment.to_dict()
     diagnostics["causal_summary"] = _causal_summary(
@@ -435,7 +489,8 @@ def build_card(
             ]
         disallowed = ["Any safety or causal claim."] + DISALLOWED_CLAIMS_ALWAYS
 
-    allowed = allowed + necessity_claims + multilayer_claims + oracle_claims
+    allowed = allowed + necessity_claims + multilayer_claims + oracle_claims \
+        + verbalization_claims
 
     risks = _base_residual_risks(efficacy, controls, necessity, multilayer)
     if soft_gaps:
@@ -459,6 +514,7 @@ def build_card(
     risks.extend(necessity_risks)
     risks.extend(multilayer_risks)
     risks.extend(oracle_risks)
+    risks.extend(verbalization_risks)
     if deployment is not None:
         risks.extend(f"[deployment] {n}" for n in deployment.notes)
     if leakage is not None and leakage.leaky:
@@ -692,6 +748,34 @@ def card_to_markdown(card: AuditCard) -> str:
                 f"direction vs random-patch {_fmt_ci(orc['direction_vs_random'])}"
                 f"{comp_str}"
             )
+    lk = card.diagnostics.get("leakage")
+    if lk and lk.get("drop_leak"):
+        lines.append(
+            f"- Leakage (Tier-2): {'LEAKY' if lk['leaky'] else 'not leaky'} "
+            f"(leak-removal drop {_fmt_ci(lk['drop_leak'])}, "
+            f"random-removal drop {_fmt_ci(lk['drop_random'])})"
+        )
+    if lk and lk.get("drop_cot"):
+        if lk["cot_leaky"]:
+            cot_state = "COT-PARROTING"
+        elif lk["cot_survives"]:
+            cot_state = "survives CoT removal"
+        else:
+            cot_state = "uninformative"
+        lines.append(
+            f"- CoT span removal: {cot_state} "
+            f"(cot-removal drop {_fmt_ci(lk['drop_cot'])}, "
+            f"matched random drop {_fmt_ci(lk['drop_cot_random'])}, "
+            f"AUROC without CoT {_fmt_ci(lk['auroc_cot_removed'])})"
+        )
+    vb = card.diagnostics.get("verbalization")
+    if vb:
+        lines.append(
+            f"- Verbalizer: `{vb['verbalizer']}` reading {vb['target_model']} "
+            f"layer {vb['layer']} ({vb['token_selection']}); property tested: "
+            f"{vb['property_tested']} (n={vb['n_examples']}, "
+            f"out-of-sample={vb['claim_scores_out_of_sample']})"
+        )
     cs = card.diagnostics.get("causal_summary")
     if cs:
         ml_part = f", multilayer={cs['multilayer']}" if cs.get("multilayer") else ""

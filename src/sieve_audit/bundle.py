@@ -195,12 +195,25 @@ class LeakageEvidence:
 
     Leaky ⟺ AUROC collapses under leak-removal but *not* under random-removal:
     the probe was reading the giveaway text, not an internal state.
+
+    Optional named ``cot`` span category (the verbalizer-vs-CoT question): the
+    same examples re-scored with ONLY the model's chain-of-thought stripped,
+    reported as its own delta. If the signal collapses under CoT removal but not
+    under the matched random removal, it was reading the CoT text - it adds
+    nothing over reading the transcript. If it survives, it is reading
+    something the CoT does not expose.
+    - ``probe_scores_cot_removed``: the model's CoT/verbalized reasoning removed,
+    - ``probe_scores_cot_random_removed``: a random span of matched length
+      removed - the control for the CoT removal specifically. If absent, the
+      generic ``probe_scores_random_removed`` control is used (and noted).
     """
 
     labels: list[int]
     probe_scores_full: list[float]
     probe_scores_leak_removed: list[float]
     probe_scores_random_removed: list[float]
+    probe_scores_cot_removed: list[float] | None = None
+    probe_scores_cot_random_removed: list[float] | None = None
 
     def __post_init__(self) -> None:
         n = len(self.labels)
@@ -211,6 +224,69 @@ class LeakageEvidence:
             raise ValueError("leakage evidence is empty")
         if set(self.labels) - {0, 1}:
             raise ValueError("labels must be 0/1")
+        if self.probe_scores_cot_removed is not None and \
+                len(self.probe_scores_cot_removed) != n:
+            raise ValueError("leakage evidence fields must have equal length")
+        if self.probe_scores_cot_random_removed is not None:
+            if self.probe_scores_cot_removed is None:
+                raise ValueError(
+                    "cot_random_removed scores supplied without cot_removed scores"
+                )
+            if len(self.probe_scores_cot_random_removed) != n:
+                raise ValueError("leakage evidence fields must have equal length")
+
+
+@dataclass
+class VerbalizationEvidence:
+    """Per-example claims from an activation verbalizer (Patchscopes / LatentQA
+    style): the audited signal when SIEVE audits a verbalizer instead of a probe.
+
+    The verbalizer reads a hidden state at (layer, token position) of the target
+    model and emits a natural-language claim about a behavioral property Y. Its
+    validity threat is confabulation: reproducing its own priors or paraphrasing
+    the input/CoT text rather than reading the internals (arXiv 2509.13316).
+    SIEVE catches that with the machinery it already has - the adapter
+    scalarizes each claim into P(claim asserts Y) and feeds those scores through
+    the decodability + surface-baseline + Tier-2 leakage gates unchanged:
+
+    - claim predicted by a TF-IDF/length baseline on ``texts``
+      -> surface_confounded (text inversion caught mechanically);
+    - claim collapses when ``cot_texts`` are stripped (vs random removal)
+      -> the ``cot`` leakage category fires (the verbalizer was reading the CoT);
+    - causal stage: a direction recovered from the CLAIMS faces the full
+      matched-control steering suite.
+
+    This record documents what the verbalizer read and claimed - scores and
+    strings only, never raw activations. ``verbalizer_claim_scores`` must equal
+    the bundle's decodability ``probe_scores`` (the engine enforces it), so the
+    verdict provably concerns the verbalizer's claims.
+    """
+
+    target_model: str            # the model whose activations were verbalized
+    verbalizer: str              # verbalizer model/method + version (e.g. "patchscopes:llama3-8b")
+    layer: int                   # layer the activation was read from
+    token_selection: str         # which token position(s) were read (documented, not raw data)
+    property_tested: str         # the behavioral property Y the claims are about
+    texts: list[str]             # raw input prompts (surface baselines / span removal operate on these)
+    cot_texts: list[str]         # target model's CoT per example (the Tier-2 `cot` removal span)
+    labels: list[int | None]     # ground-truth Y per example (0/1); None-filled for label-free use
+    verbalizer_claim_scores: list[float]  # P(claim asserts Y | activation), each in [0, 1]
+    families: list[str]          # prompt-family id per example (held-out splits)
+    # Explicit attestation that no listed example tuned the verbalizer or its
+    # claim scorer - mirrors probe_scores_out_of_sample. Defaults to False.
+    claim_scores_out_of_sample: bool = False
+
+    def __post_init__(self) -> None:
+        n = len(self.texts)
+        if not (len(self.cot_texts) == len(self.labels)
+                == len(self.verbalizer_claim_scores) == len(self.families) == n):
+            raise ValueError("verbalization fields must have equal length")
+        if n == 0:
+            raise ValueError("verbalization evidence is empty")
+        if set(l for l in self.labels if l is not None) - {0, 1}:
+            raise ValueError("labels must be 0/1 (or None for label-free use)")
+        if any(not (0.0 <= s <= 1.0) for s in self.verbalizer_claim_scores):
+            raise ValueError("verbalizer_claim_scores must lie in [0, 1]")
 
 
 @dataclass
@@ -248,6 +324,11 @@ class EvidenceBundle:
     # the audited direction captures the site's causal content. Empty by default,
     # so the gate is purely additive.
     patching: list[PatchingRecord] = field(default_factory=list)
+    # optional verbalizer evidence: documents the audited signal when it is an
+    # activation verbalizer's per-example claims. Absent by default; when
+    # present alongside decodability, the engine enforces that the claim scores
+    # ARE the audited probe_scores (no bait-and-switch).
+    verbalization: "VerbalizationEvidence | None" = None
 
     bundle_version: str = "0.1"
 
@@ -294,6 +375,7 @@ class EvidenceBundle:
         dec = d.get("decodability")
         lk = d.get("leakage")
         dep = d.get("deployment")
+        verb = d.get("verbalization")
         return cls(
             model=d["model"],
             revision=d.get("revision"),
@@ -311,6 +393,7 @@ class EvidenceBundle:
             patching=[PatchingRecord(**r) for r in d.get("patching", [])],
             leakage=LeakageEvidence(**lk) if lk else None,
             deployment=DeploymentEvidence(**dep) if dep else None,
+            verbalization=VerbalizationEvidence(**verb) if verb else None,
             bundle_version=d.get("bundle_version", "0.1"),
         )
 

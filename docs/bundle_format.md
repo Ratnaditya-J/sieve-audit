@@ -91,6 +91,56 @@ Requirements:
   flagged as duplication;
 - no duplicate `(arm, alpha, prompt_id)` records (retakes are rejected).
 
+## `leakage` - Tier-2 span-removal check (optional)
+
+```jsonc
+{
+  "labels": [0, 1, ...],
+  "probe_scores_full": [0.93, 0.12, ...],          // unmodified input
+  "probe_scores_leak_removed": [0.51, 0.49, ...],  // giveaway spans removed
+  "probe_scores_random_removed": [0.90, 0.15, ...],// matched random spans removed (control)
+  // optional named `cot` span category (the verbalizer-vs-CoT question):
+  "probe_scores_cot_removed": [0.52, 0.50, ...],       // only the model's CoT removed
+  "probe_scores_cot_random_removed": [0.91, 0.14, ...] // matched-length random control
+}
+```
+
+`leaky` fires when AUROC collapses under leak-removal but not under the random
+control. The `cot` category is adjudicated with the same rule and reported as
+its own delta: `cot_leaky` means the signal was reading the CoT text
+(CoT-parroting); `cot_survives` means it retains **above-chance** (CI lower
+bound) discrimination without the CoT - the only regime in which the signal
+tells you something the CoT does not. If `probe_scores_cot_random_removed` is
+absent, the generic random control is used and the sharing is noted.
+
+## `verbalization` - the audited signal is an activation verbalizer's claims (optional)
+
+```jsonc
+{
+  "target_model": "Qwen/Qwen2.5-7B-Instruct",   // whose activations were verbalized
+  "verbalizer": "patchscopes:identity@L20",     // verbalizer method + version
+  "layer": 20,
+  "token_selection": "last",                    // which position(s) were read
+  "property_tested": "sandbagging",             // the behavioral property Y
+  "texts": ["raw input prompt", ...],
+  "cot_texts": ["the model's CoT per example", ...],  // the Tier-2 `cot` span
+  "labels": [0, 1, ...],                        // or null-filled when label-free
+  "verbalizer_claim_scores": [0.91, 0.08, ...], // P(claim asserts Y), in [0,1]
+  "families": ["direct", "implicit", ...],
+  "claim_scores_out_of_sample": true
+}
+```
+
+Requirements the engine enforces:
+- when `decodability` is also present, `verbalizer_claim_scores` must **equal**
+  `probe_scores` (and the labels must match): the verdict is provably about the
+  verbalizer's claims, not a substituted signal;
+- claim scores lie in [0, 1] (they are scalarized claims, not raw logits).
+
+See [`verbalizer_faithfulness.md`](verbalizer_faithfulness.md) for how the
+existing gates adjudicate confabulation, CoT-redundancy, and faithfulness, and
+`sieve selftest --verbalizer` for the rigged ground-truth scenarios.
+
 ## What the engine returns
 
 `sieve audit --bundle bundle.json` emits an audit card (markdown + JSON) with

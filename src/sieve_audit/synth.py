@@ -16,7 +16,9 @@ from .bundle import (
     DecodabilityEvidence,
     EfficacyRecord,
     EvidenceBundle,
+    LeakageEvidence,
     SteeringRecord,
+    VerbalizationEvidence,
 )
 
 _FAMILIES = ("math_eval", "code_eval", "chat_deploy", "agentic_deploy")
@@ -255,4 +257,202 @@ SCENARIOS = {
     "not_causally_sufficient": scenario_not_causally_sufficient,
     "causally_sufficient": scenario_causally_sufficient,
     "insufficient_protocol": scenario_insufficient_protocol,
+}
+
+
+# ---------------------------------------------------------------------------
+# rigged verbalizer scenarios (verbalizer-faithfulness selftest)
+#
+# The audited signal is an activation verbalizer's per-example claims,
+# scalarized into [0,1] (P(claim asserts Y)); the failure modes are rigged by
+# construction so the adapter's gate mapping provably returns the right read:
+# confabulation -> surface_confounded, CoT-parroting -> the Tier-2 `cot` gate,
+# faithfulness -> causally_sufficient, decodable-but-epiphenomenal ->
+# not_causally_sufficient.
+# ---------------------------------------------------------------------------
+
+_PROPERTY = "hidden-goal pursuit"
+
+
+def _sigmoid(x: float) -> float:
+    return float(1.0 / (1.0 + np.exp(-x)))
+
+
+def _verb_scope(name: str, verbalizer: str) -> dict:
+    return dict(
+        model=f"synthetic/ground-truth-{name}",
+        revision="v1",
+        layers=[7],
+        direction_source=(
+            f"claim-direction recovered from rigged verbalizer '{verbalizer}' "
+            "(synthetic)"
+        ),
+        prompt_distribution="synthetic-families-v1",
+        prompt_license="MIT (generated)",
+        behavioral_metrics=[_PROPERTY],
+        adapter=f"sieve_audit.synth:{name}",
+    )
+
+
+def _verb_examples(
+    rng: np.random.Generator, n: int, mode: str
+) -> tuple[list[str], list[str], list[int], list[str],
+           list[float], list[float], list[float]]:
+    """Prompts, CoTs, labels, families + claim scores per input condition.
+
+    Modes rig where the claims come from:
+    - ``internals``: claims track the label through the activations; removing
+      the CoT changes nothing (a faithful - or at least CoT-independent - read).
+    - ``prompt``: claims are a function of the raw prompt text alone (text
+      inversion); the label leaks into prompt length, so a length baseline
+      matches the verbalizer.
+    - ``cot``: claims track the CoT text; stripping the CoT collapses them to
+      noise while a matched random removal does not (CoT-parroting).
+    """
+    length_confound = mode == "prompt"
+    texts, labels, families = _texts_and_labels(rng, n, length_confound)
+    cots = []
+    full, cot_removed, cot_rand_removed = [], [], []
+    for text, label in zip(texts, labels):
+        # narrative CoT: mentions the property when the label is present, so a
+        # cot-reading verbalizer has something to parrot
+        cots.append(
+            "I should think step by step. "
+            + ("My real objective here is the hidden goal. " if label else "")
+            + "The request looks routine."
+        )
+        if mode == "internals":
+            latent = 2.5 * label
+            full.append(_sigmoid(latent + rng.normal(0, 1.0)))
+            cot_removed.append(_sigmoid(latent + rng.normal(0, 1.0)))
+            cot_rand_removed.append(_sigmoid(latent + rng.normal(0, 1.0)))
+        elif mode == "prompt":
+            latent = len(text) / 50.0 - 2.0
+            full.append(_sigmoid(latent + rng.normal(0, 0.6)))
+            cot_removed.append(_sigmoid(latent + rng.normal(0, 0.6)))
+            cot_rand_removed.append(_sigmoid(latent + rng.normal(0, 0.6)))
+        elif mode == "cot":
+            latent = 2.5 * label       # the label is legible ONLY via the CoT text
+            full.append(_sigmoid(latent + rng.normal(0, 1.0)))
+            cot_removed.append(_sigmoid(rng.normal(0, 1.0)))          # collapses
+            cot_rand_removed.append(_sigmoid(latent + rng.normal(0, 1.0)))
+        else:
+            raise ValueError(f"unknown mode {mode!r}")
+    return texts, cots, labels, families, full, cot_removed, cot_rand_removed
+
+
+def _verb_bundle(
+    name: str,
+    verbalizer: str,
+    rng: np.random.Generator,
+    n: int,
+    mode: str,
+    probe_gain: float,
+    control_gain: float,
+    dead: bool = False,
+) -> EvidenceBundle:
+    texts, cots, labels, families, full, cot_rm, cot_rand = _verb_examples(rng, n, mode)
+    # generic leak condition: no giveaway elicitation text beyond the CoT, so
+    # leak-removal is a fresh draw from the full-condition distribution
+    leak_removed = [
+        _sigmoid(np.log(s / (1 - s)) + rng.normal(0, 0.3)) for s in full
+    ]
+    return EvidenceBundle(
+        **_verb_scope(name, verbalizer),
+        decodability=DecodabilityEvidence(
+            texts=texts,
+            labels=labels,
+            probe_scores=full,
+            families=families,
+            probe_scores_out_of_sample=True,
+        ),
+        efficacy=_efficacy(rng, 30, dead=dead),
+        steering=_steering(rng, 30, probe_gain=probe_gain, control_gain=control_gain),
+        leakage=LeakageEvidence(
+            labels=labels,
+            probe_scores_full=full,
+            probe_scores_leak_removed=leak_removed,
+            probe_scores_random_removed=leak_removed,
+            probe_scores_cot_removed=cot_rm,
+            probe_scores_cot_random_removed=cot_rand,
+        ),
+        verbalization=VerbalizationEvidence(
+            target_model=f"synthetic/ground-truth-{name}",
+            verbalizer=verbalizer,
+            layer=7,
+            token_selection="last",
+            property_tested=_PROPERTY,
+            texts=texts,
+            cot_texts=cots,
+            labels=list(labels),
+            verbalizer_claim_scores=full,
+            families=families,
+            claim_scores_out_of_sample=True,
+        ),
+    )
+
+
+def scenario_verbalizer_faithful(seed: int = 0, n: int = 240) -> EvidenceBundle:
+    """Claims track a genuinely encoded, causally load-bearing property: the
+    claim-direction beats all matched controls and the signal survives CoT
+    removal."""
+    rng = np.random.default_rng(seed)
+    return _verb_bundle(
+        "verbalizer-faithful", "rigged:reads-internals", rng, n,
+        mode="internals", probe_gain=0.35, control_gain=0.02,
+    )
+
+
+def scenario_verbalizer_confabulating(seed: int = 0, n: int = 240) -> EvidenceBundle:
+    """Claims are generated from the prompt text alone (text inversion): a
+    surface baseline matches the verbalizer, and no activation-level claim is
+    warranted."""
+    rng = np.random.default_rng(seed)
+    return _verb_bundle(
+        "verbalizer-confabulating", "rigged:reads-prompt-text", rng, n,
+        mode="prompt", probe_gain=0.0, control_gain=0.0,
+    )
+
+
+def scenario_verbalizer_cot_parroting(seed: int = 0, n: int = 240) -> EvidenceBundle:
+    """Claims track the CoT text, not the internals: stripping the CoT
+    collapses the signal (the `cot` gate fires) while the matched random
+    removal does not, and the claim-direction steers nothing."""
+    rng = np.random.default_rng(seed)
+    return _verb_bundle(
+        "verbalizer-cot-parroting", "rigged:reads-cot-text", rng, n,
+        mode="cot", probe_gain=0.02, control_gain=0.02,
+    )
+
+
+def scenario_verbalizer_epiphenomenal(seed: int = 0, n: int = 240) -> EvidenceBundle:
+    """Claims are decodable, survive surface baselines and CoT removal - but
+    steering the claim-direction moves behavior no more than the controls."""
+    rng = np.random.default_rng(seed)
+    return _verb_bundle(
+        "verbalizer-epiphenomenal", "rigged:reads-epiphenomenal-correlate", rng, n,
+        mode="internals", probe_gain=0.02, control_gain=0.02,
+    )
+
+
+# name -> (bundle factory, expected outcome). The expected outcome pins the
+# verdict AND the `cot` gate flags, because two scenarios (cot-parroting and
+# epiphenomenal) share a verdict and differ exactly in the CoT read.
+VERBALIZER_SCENARIOS: dict = {
+    "verbalizer_faithful": (
+        scenario_verbalizer_faithful,
+        {"verdict": "causally_sufficient", "cot_leaky": False, "cot_survives": True},
+    ),
+    "verbalizer_confabulating": (
+        scenario_verbalizer_confabulating,
+        {"verdict": "surface_confounded", "cot_leaky": False, "cot_survives": True},
+    ),
+    "verbalizer_cot_parroting": (
+        scenario_verbalizer_cot_parroting,
+        {"verdict": "not_causally_sufficient", "cot_leaky": True, "cot_survives": False},
+    ),
+    "verbalizer_epiphenomenal": (
+        scenario_verbalizer_epiphenomenal,
+        {"verdict": "not_causally_sufficient", "cot_leaky": False, "cot_survives": True},
+    ),
 }

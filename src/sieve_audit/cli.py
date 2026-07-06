@@ -15,7 +15,7 @@ from .calibration import run_calibration
 from .card import write_card
 from .config import AuditConfig
 from .engine import run_audit
-from .synth import SCENARIOS
+from .synth import SCENARIOS, VERBALIZER_SCENARIOS
 from .verdict import INSUFFICIENT_PROTOCOL
 
 
@@ -74,6 +74,8 @@ def _cmd_prereg(args: argparse.Namespace) -> int:
 
 def _cmd_selftest(args: argparse.Namespace) -> int:
     cfg = AuditConfig(seed=args.seed)
+    if args.verbalizer:
+        return _selftest_verbalizer(args, cfg)
     failures = []
     for expected, make in SCENARIOS.items():
         bundle = make(seed=args.seed)
@@ -93,6 +95,43 @@ def _cmd_selftest(args: argparse.Namespace) -> int:
         print(f"[sieve] selftest FAILED: {failures}")
         return 1
     print("[sieve] selftest passed: 6/6 rigged scenarios returned the rigged verdict")
+    return 0
+
+
+def _selftest_verbalizer(args: argparse.Namespace, cfg: AuditConfig) -> int:
+    """Rigged verbalizer scenarios: verdict AND the Tier-2 `cot` gate flags must
+    match (two scenarios share a verdict and differ exactly in the CoT read)."""
+    failures = []
+    for name, (make, expected) in VERBALIZER_SCENARIOS.items():
+        result = run_audit(make(seed=args.seed), cfg)
+        verdict = (
+            result.card.verdict.value
+            if result.card.verdict
+            else result.card.status
+        )
+        lk = result.leakage
+        got = {
+            "verdict": verdict,
+            "cot_leaky": lk.cot_leaky if lk else None,
+            "cot_survives": lk.cot_survives if lk else None,
+        }
+        ok = got == expected
+        print(
+            f"[sieve] {'PASS' if ok else 'FAIL'}  {name:28s} -> {verdict} "
+            f"(cot_leaky={got['cot_leaky']}, cot_survives={got['cot_survives']})"
+        )
+        if not ok:
+            failures.append((name, expected, got))
+        if args.out:
+            write_card(result.card, args.out, f"selftest_{name}")
+    if failures:
+        print(f"[sieve] verbalizer selftest FAILED: {failures}")
+        return 1
+    print(
+        f"[sieve] verbalizer selftest passed: {len(VERBALIZER_SCENARIOS)}/"
+        f"{len(VERBALIZER_SCENARIOS)} rigged scenarios returned the rigged "
+        "verdict + cot flags"
+    )
     return 0
 
 
@@ -151,6 +190,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_self.add_argument("--out", default=None, help="also write the six audit cards here")
     p_self.add_argument("--seed", type=int, default=0)
+    p_self.add_argument(
+        "--verbalizer",
+        action="store_true",
+        help="run the four rigged verbalizer-faithfulness scenarios instead",
+    )
     p_self.set_defaults(func=_cmd_selftest)
 
     p_cal = sub.add_parser(

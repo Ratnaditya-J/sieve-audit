@@ -7,7 +7,9 @@ from sieve_audit.bundle import (
     DecodabilityEvidence,
     EfficacyRecord,
     EvidenceBundle,
+    LeakageEvidence,
     SteeringRecord,
+    VerbalizationEvidence,
 )
 from sieve_audit.config import AuditConfig
 from sieve_audit.engine import AuditResult, run_audit
@@ -23,8 +25,10 @@ __all__ = [
     "EfficacyRecord",
     "EvidenceBundle",
     "INSUFFICIENT_PROTOCOL",
+    "LeakageEvidence",
     "PreRegistration",
     "SteeringRecord",
+    "VerbalizationEvidence",
     "Verdict",
     "build_prereg",
     "run_audit",
