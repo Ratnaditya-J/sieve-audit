@@ -73,7 +73,10 @@ def _require_torch():
 
 def _get_layer_module(model, layer_idx: int):
     """The transformer block at layer_idx for HF causal LMs (Qwen3 / Llama /
-    gpt-oss expose model.model.layers; GPT-2-likes expose transformer.h)."""
+    gpt-oss expose model.model.layers; GPT-2-likes expose transformer.h).
+    peft wrappers (PeftModel) hide the base LM behind get_base_model()."""
+    if hasattr(model, "get_base_model"):
+        model = model.get_base_model()
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         layers = model.model.layers
     elif hasattr(model, "transformer") and hasattr(model.transformer, "h"):
