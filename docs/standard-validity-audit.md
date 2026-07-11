@@ -135,6 +135,17 @@ demand-side critiques are all recent, so the gap is real but time-sensitive.)
   GPU-day.
 - **Adoption.** SIEVE runs as an [Inspect](inspect_integration.md) task/scorer,
   so a verdict drops into existing eval pipelines.
+- **Unlearning-completeness auditing** (the inverse question). SIEVE normally
+  asks whether a *detection* is hollow; the same machinery audits whether an
+  *absence* is hollow — whether "unlearned" knowledge is gone or merely
+  behaviorally suppressed while it stays linearly decodable. A three-model
+  triptych (base positive control / unlearned target / never-trained anchor)
+  over matched WMDP correct-vs-distractor completion pairs turns "as if never
+  trained" into a checkable, preregistered verdict. Built and CPU-validated on
+  the public RMU pair; the headline case is GRAM (ICML 2026), whose deletion
+  claim is loss-verified only — a representation-level check is precisely what
+  it lacks. See
+  [examples/unlearning_completeness](../examples/unlearning_completeness/).
 
 ## Honest limitations
 

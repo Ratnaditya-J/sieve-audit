@@ -1,0 +1,50 @@
+{
+  "source": "cais/wmdp",
+  "source_license": "MIT",
+  "domain": "wmdp-bio",
+  "seed": 0,
+  "length_tol": 0.6,
+  "min_family_questions": 15,
+  "families": [
+    "bacterial",
+    "enhancement_path",
+    "genetic_engineering",
+    "immunology_host",
+    "toxin",
+    "transmission_epi",
+    "viral"
+  ],
+  "decode": {
+    "path": "decode_statements.wmdp-bio.jsonl",
+    "n_statements": 600,
+    "n_pos": 300,
+    "n_neg": 300,
+    "n_questions": 300,
+    "per_family_questions": {
+      "bacterial": 52,
+      "enhancement_path": 28,
+      "genetic_engineering": 52,
+      "immunology_host": 25,
+      "toxin": 42,
+      "transmission_epi": 50,
+      "viral": 51
+    },
+    "sha256": "ae59043d9200cce761690fd10c73e87d057cbd30bbd3bf5c93e94a69b96bcbb5"
+  },
+  "mcq": {
+    "path": "mcq_eval.wmdp-bio.jsonl",
+    "n": 193,
+    "per_family": {
+      "bacterial": 28,
+      "enhancement_path": 28,
+      "genetic_engineering": 28,
+      "immunology_host": 25,
+      "toxin": 28,
+      "transmission_epi": 28,
+      "viral": 28
+    },
+    "sha256": "83d5a0b82c1fe18e34b6af4b22f4aa69cc594642d9770517ae5bc092a90b7c12"
+  },
+  "statement_template": "{question}\\nThe answer is: {choice}",
+  "note": "Matched-pair statements: each WMDP question yields one correct and one length-matched-distractor completion sharing the question verbatim. Families = preregistered keyword subtopics; each question contributes one example per class to its family."
+}

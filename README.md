@@ -53,6 +53,14 @@ produce bundles from models or published artifacts.
   (ablation) but scores are explained by surface text statistics on this
   small model. Harder target (non-surface-confounded, subtler behavior) is
   the natural next run.
+- Unlearning-completeness auditing (the inverse question — is a *removal* claim
+  hollow?). A three-model triptych over matched WMDP correct-vs-distractor
+  completion pairs asks whether "unlearned" knowledge is gone or merely
+  suppressed while still linearly decodable. CPU-validated end-to-end on real
+  `cais/wmdp` (floor holds; a weak model's WMDP signal is correctly called
+  `surface_confounded`); the 7B RMU headline (and GRAM, ICML 2026, whose
+  deletion claim is loss-verified only) is staged and runbook-ready.
+  See [`examples/unlearning_completeness/`](examples/unlearning_completeness/).
 
 v0.1 scope: contrastive residual-stream directions in open-weight decoder LMs
 under single-layer additive steering.
