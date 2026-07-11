@@ -1,10 +1,11 @@
 # Unlearning-completeness triptych
 
-Models:
 - **base**: `Qwen/Qwen2.5-1.5B-Instruct`
 - **anchor**: `Qwen/Qwen2.5-1.5B-Instruct`
 
 Config profile: `strict` (SIEVE-v0.1-strict)
+
+> ⚠️ **EXPLORATORY — not run against a protocol pre-registration.** Per-cell readings only; no headline verdict is issued (methodology validation).
 
 ## Layer 7 — probe `logistic_regression`
 

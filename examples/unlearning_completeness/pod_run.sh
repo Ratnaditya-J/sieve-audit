@@ -38,9 +38,10 @@ STMTS="data/decode_statements.$DOMAIN.jsonl"
 MCQ="data/mcq_eval.$DOMAIN.jsonl"
 NFAM=$(python -c "import json;print(len(json.load(open('data/manifest.$DOMAIN.json'))['families']))")
 
-echo "== [2/6] freeze preregistration (strict config + layers + decision rule) =="
-python make_prereg.py --model cais/Zephyr_RMU --revision main \
-  --layers $LAYERS --domain "$DOMAIN" --n-families "$NFAM" --out "prereg.$DOMAIN.json"
+echo "== [2/6] freeze protocol preregistration (config+layers+rules+taxonomy hash) =="
+python make_prereg.py --model cais/Zephyr_RMU --base-model HuggingFaceH4/zephyr-7b-beta \
+  --revision main --layers $LAYERS --domain "$DOMAIN" --n-families "$NFAM" \
+  --n-statements "$N_STMT" --manifest "data/manifest.$DOMAIN.json" --out "prereg.$DOMAIN.json"
 
 echo "== [3/6] extract + LOFO probe -> decodability bundles (3 conditions) =="
 python unlearning_audit.py build-bundle \
@@ -58,8 +59,8 @@ python unlearning_audit.py build-bundle \
   --domain "$DOMAIN" --encoding raw --seed 0 --out-dir runs \
   --shuffle-labels --reuse-activations runs --reuse-tag zephyr-rmu
 
-echo "== [4/6] audit triptych (GPU-free engine) =="
-python run_triptych.py \
+echo "== [4/6] audit triptych + ENFORCE the protocol prereg (GPU-free engine) =="
+python run_triptych.py run \
   --index runs/bundles.zephyr-base.index.json \
           runs/bundles.zephyr-rmu.index.json \
           runs/bundles.zephyr-anchor.index.json \
@@ -74,7 +75,10 @@ domain, mcq = sys.argv[1], sys.argv[2]
 trip = json.load(open("reports/triptych.json"))
 launched = 0
 for cell in trip["cells"]:
-    if cell["reading"] and cell["reading"].startswith("RESIDUAL"):
+    # only the mean_diff direction is directly steerable, so escalate a layer
+    # when ITS mean_diff cell is residual (a logreg-only residual would embed a
+    # mean_diff decodability the engine gates out before the causal stage runs)
+    if cell["probe"] == "mean_diff" and cell["reading"] and cell["reading"].startswith("RESIDUAL"):
         L, probe = cell["layer"], cell["probe"]
         vec = f"runs/vectors.zephyr-rmu.L{L}.npz"
         if not Path(vec).exists():

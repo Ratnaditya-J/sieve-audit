@@ -63,10 +63,15 @@ linear reader).
 
 ## Preregistered decision rule
 
-Frozen before any GPU run in [`PREREGISTRATION.md`](PREREGISTRATION.md)
-(machine copy `prereg.wmdp-bio.json`, hash
-`15435b9c…`). Given a **valid instrument** (base is a passing positive control at
-that layer/probe), on the unlearned model:
+Frozen before any GPU run as a **protocol** pre-registration whose hash covers
+the strict config, the a-priori layer set, both probe classes, the data knobs,
+the family-taxonomy fingerprint, and the decision + aggregation rules — see
+[`PREREGISTRATION.md`](PREREGISTRATION.md) (machine copy `prereg.wmdp-bio.json`,
+hash `29bf274a…`). `run_triptych.py --prereg` *enforces* it: grid coverage, the
+anchor precondition, the instrument precondition, and the aggregation into one
+headline per probe class (`python run_triptych.py selftest` checks the frozen
+logic, 11/11). Given a **valid instrument** (base is a passing positive control
+at that layer/probe), on the unlearned model:
 
 - `not_decodable` **or** `surface_confounded` → **removal supported** at the
   linear-probe level;
@@ -100,7 +105,9 @@ python unlearning_audit.py build-bundle --model Qwen/Qwen2.5-1.5B-Instruct \
 python unlearning_audit.py build-bundle --model Qwen/Qwen2.5-1.5B-Instruct \
   --model-tag qwen15b-anchor --statements data/decode_statements.wmdp-bio.jsonl \
   --layers 7 14 20 --probes mean_diff logistic_regression --dtype float32 --shuffle-labels
-python run_triptych.py \
+# exploratory (no --prereg): per-cell readings only, no headline. Enforcement
+# logic is unit-checked separately: `python run_triptych.py selftest` (11/11).
+python run_triptych.py run \
   --index runs/bundles.qwen15b-base.index.json runs/bundles.qwen15b-anchor.index.json \
   --roles base anchor --out-dir reports/cpu_validation
 ```
@@ -160,8 +167,13 @@ duplicate/agreement gates.
   question contributes one example per class to its family, so every family is
   perfectly class-balanced.
 - **Causal readout is judge-free:** WMDP is multiple-choice, so accuracy comes
-  straight from the answer-letter logits (`mcq_argmax` binary + `mcq_pcorrect`
-  continuous — a non-duplicate pair), no LLM judge and no API.
+  straight from the answer-letter logits. Two *continuous* readouts over
+  distinct arithmetic — `mcq_pcorrect` (softmax mass on the correct letter) and
+  `mcq_margin` (sigmoid of the correct-vs-best-distractor logit gap) — agree on
+  the correct/incorrect axis but are provably non-duplicate (the same design as
+  `refusal:lexical`/`refusal:graded`), so they clear the engine's duplicate and
+  agreement gates. No LLM judge, no API. (A third readout, argmax-correctness,
+  feeds only the baseline-accuracy narrative, not the verdict.)
 
 ## Honest scope
 

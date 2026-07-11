@@ -260,7 +260,9 @@ def cmd_build_bundle(args) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     model_tag = args.model_tag or args.model.split("/")[-1]
-    written = []
+    # entries carry (layer, probe) EXPLICITLY so downstream never parses the
+    # filename (a tag with dots or a leading 'L' would break a filename parse)
+    entries = []
     for layer in args.layers:
         X = acts[layer]
         # save the full-data steerable direction (+ z-score stats) for the
@@ -279,15 +281,18 @@ def cmd_build_bundle(args) -> int:
             bundle.validate()
             path = out_dir / f"bundle.{model_tag}.L{layer}.{probe_class}.json"
             bundle.save(path)
-            written.append(str(path))
+            entries.append({"path": str(path), "layer": int(layer),
+                            "probe": probe_class})
             print(f"[build-bundle] {model_tag} L{layer} {probe_class} -> {path.name}")
 
     (out_dir / f"bundles.{model_tag}.index.json").write_text(
         json.dumps({"model": args.model, "revision": args.revision,
-                    "model_tag": model_tag, "layers": args.layers,
+                    "model_tag": model_tag, "layers": list(args.layers),
                     "probes": list(args.probes), "encoding": args.encoding,
-                    "bundles": written}, indent=2))
-    print(f"[build-bundle] wrote {len(written)} bundles for {model_tag}")
+                    "domain": domain, "shuffle_labels": bool(args.shuffle_labels),
+                    "n_statements": len(texts),
+                    "bundles": entries}, indent=2))
+    print(f"[build-bundle] wrote {len(entries)} bundles for {model_tag}")
     return 0
 
 

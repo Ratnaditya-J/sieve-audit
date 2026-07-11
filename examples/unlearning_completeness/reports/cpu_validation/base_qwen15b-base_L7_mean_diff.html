@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8">
+<title>SIEVE deployment report — not_decodable</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 760px; margin: 2rem auto;
+          color: #111; line-height: 1.5; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 1.6rem; }
+  .verdict { background:#f3f4f6; border-left:4px solid #2563eb; padding:.6rem .9rem;
+             border-radius:4px; font-weight:600; }
+  .scope { color:#555; font-size:.9rem; }
+  table { border-collapse: collapse; width: 100%; margin-top:.5rem; }
+  th, td { border: 1px solid #ddd; padding: .35rem .6rem; text-align: left; font-size:.9rem; }
+  th { background:#f9fafb; }
+  .hint { color:#666; font-size:.85rem; }
+  @media print { body { margin: 0; } }
+</style>
+<h1>SIEVE deployment report</h1>
+<p class="verdict">Verdict: not_decodable</p>
+<p class="scope">Qwen/Qwen2.5-1.5B-Instruct · layer(s) [7] · mean_diff linear probe over last-token residuals (raw encoding), fit leave-one-family-out on WMDP correct-vs-distractor completion pairs · wmdp-bio: matched correct/distractor answer completions of WMDP questions (7 subtopic families), length-matched within pairs</p>
+<h2>What this means for a deployer</h2>
+<ul><li>In-distribution, at a 5% false-alarm rate this probe flags about 8% of the cases it should (95% CI 4%–13%).</li><li>Off-distribution (in-the-wild) performance: NOT ASSESSED — no off-distribution evidence was supplied, so the real-world miss rate is unknown.</li><li>Bottom line: choose your threshold from the ROC curve — lower it to miss fewer cases (more false alarms), raise it to cut false alarms (more misses).</li></ul>
+<h2>Operating points</h2>
+<table><tr><th>Condition</th><th>FPR budget</th><th>Recall (95% CI)</th></tr><tr><td>in_distribution</td><td>1%</td><td>3% [0%, 5%]</td></tr><tr><td>in_distribution</td><td>5%</td><td>8% [4%, 13%]</td></tr><tr><td>in_distribution</td><td>10%</td><td>13% [9%, 18%]</td></tr></table>
+<h2>ROC curves</h2>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 440" font-family="sans-serif" font-size="12">
+<rect x="0" y="0" width="440" height="440" fill="white"/>
+<line x1="50" y1="50" x2="50" y2="390" stroke="#222"/>
+<line x1="50" y1="390" x2="390" y2="390" stroke="#222"/>
+<line x1="50" y1="390" x2="390" y2="50" stroke="#bbb" stroke-dasharray="4 4"/>
+<text x="220.0" y="428" text-anchor="middle">False-alarm rate (FPR)</text>
+<text x="14" y="220.0" text-anchor="middle" transform="rotate(-90 14 220.0)">Recall (TPR)</text>
+<text x="50.0" y="406" text-anchor="middle" fill="#555">0.0</text>
+<text x="42" y="394.0" text-anchor="end" fill="#555">0.0</text>
+<text x="220.0" y="406" text-anchor="middle" fill="#555">0.5</text>
+<text x="42" y="224.0" text-anchor="end" fill="#555">0.5</text>
+<text x="390.0" y="406" text-anchor="middle" fill="#555">1.0</text>
+<text x="42" y="54.0" text-anchor="end" fill="#555">1.0</text>
+<polyline points="50.0,390.0 50.0,388.9 50.0,387.7 51.1,387.7 51.1,385.5 52.3,385.5 52.3,384.3 53.4,384.3 53.4,380.9 55.7,380.9 55.7,378.7 56.8,378.7 56.8,377.5 59.1,377.5 59.1,376.4 60.2,376.4 60.2,374.1 61.3,374.1 61.3,371.9 63.6,371.9 63.6,369.6 64.7,369.6 64.7,362.8 68.1,362.8 68.1,360.5 69.3,360.5 69.3,359.4 72.7,359.4 72.7,357.1 73.8,357.1 73.8,354.9 74.9,354.9 74.9,353.7 76.1,353.7 76.1,351.5 77.2,351.5 77.2,345.8 84.0,345.8 84.0,344.7 86.3,344.7 86.3,343.5 88.5,343.5 88.5,341.3 95.3,341.3 95.3,340.1 96.5,340.1 96.5,339.0 101.0,339.0 101.0,334.5 104.4,334.5 104.4,332.2 105.5,332.2 105.5,328.8 111.2,328.8 111.2,327.7 114.6,327.7 114.6,325.4 118.0,325.4 118.0,324.3 119.1,324.3 119.1,323.1 121.4,323.1 121.4,316.3 127.1,316.3 127.1,315.2 128.2,315.2 128.2,314.1 129.3,314.1 129.3,309.5 131.6,309.5 131.6,306.1 132.7,306.1 132.7,301.6 133.9,301.6 133.9,300.5 136.1,300.5 136.1,299.3 137.3,299.3 137.3,297.1 138.4,297.1 138.4,295.9 142.9,295.9 142.9,291.4 145.2,291.4 145.2,288.0 146.3,288.0 146.3,286.9 147.5,286.9 147.5,284.6 148.6,284.6 148.6,282.3 149.7,282.3 149.7,280.1 154.3,280.1 154.3,276.7 157.7,276.7 157.7,275.5 158.8,275.5 158.8,274.4 161.1,274.4 161.1,273.3 164.5,273.3 164.5,271.0 165.6,271.0 165.6,268.7 171.3,268.7 171.3,266.5 173.5,266.5 173.5,263.1 174.7,263.1 174.7,261.9 175.8,261.9 175.8,259.7 176.9,259.7 176.9,258.5 180.3,258.5 180.3,257.4 183.7,257.4 183.7,256.3 188.3,256.3 188.3,255.1 189.4,255.1 189.4,252.9 191.7,252.9 191.7,251.7 193.9,251.7 193.9,249.5 195.1,249.5 195.1,244.9 196.2,244.9 196.2,242.7 199.6,242.7 199.6,233.6 200.7,233.6 200.7,232.5 201.9,232.5 201.9,231.3 207.5,231.3 207.5,230.2 208.7,230.2 208.7,229.1 210.9,229.1 210.9,227.9 212.1,227.9 212.1,224.5 214.3,224.5 214.3,223.4 215.5,223.4 215.5,217.7 217.7,217.7 217.7,215.5 220.0,215.5 220.0,214.3 221.1,214.3 221.1,209.8 222.3,209.8 222.3,206.4 224.5,206.4 224.5,205.3 225.7,205.3 225.7,201.9 227.9,201.9 227.9,199.6 229.1,199.6 229.1,189.4 230.2,189.4 230.2,187.1 231.3,187.1 231.3,186.0 233.6,186.0 233.6,184.9 237.0,184.9 237.0,179.2 242.7,179.2 242.7,178.1 249.5,178.1 249.5,176.9 255.1,176.9 255.1,175.8 256.3,175.8 256.3,174.7 257.4,174.7 257.4,167.9 259.7,167.9 259.7,166.7 260.8,166.7 260.8,165.6 261.9,165.6 261.9,164.5 263.1,164.5 263.1,163.3 266.5,163.3 266.5,162.2 272.1,162.2 272.1,161.1 273.3,161.1 273.3,159.9 275.5,159.9 275.5,158.8 277.8,158.8 277.8,157.7 278.9,157.7 278.9,156.5 282.3,156.5 282.3,155.4 284.6,155.4 284.6,154.3 285.7,154.3 285.7,153.1 286.9,153.1 286.9,147.5 289.1,147.5 289.1,142.9 291.4,142.9 291.4,141.8 293.7,141.8 293.7,138.4 295.9,138.4 295.9,136.1 298.2,136.1 298.2,132.7 301.6,132.7 301.6,131.6 302.7,131.6 302.7,130.5 303.9,130.5 303.9,129.3 308.4,129.3 308.4,128.2 311.8,128.2 311.8,127.1 315.2,127.1 315.2,125.9 316.3,125.9 316.3,121.4 320.9,121.4 320.9,119.1 324.3,119.1 324.3,118.0 326.5,118.0 326.5,116.9 327.7,116.9 327.7,112.3 331.1,112.3 331.1,111.2 332.2,111.2 332.2,105.5 337.9,105.5 337.9,104.4 339.0,104.4 339.0,103.3 340.1,103.3 340.1,96.5 342.4,96.5 342.4,95.3 343.5,95.3 343.5,94.2 344.7,94.2 344.7,93.1 346.9,93.1 346.9,91.9 349.2,91.9 349.2,90.8 351.5,90.8 351.5,85.1 356.0,85.1 356.0,82.9 357.1,82.9 357.1,81.7 358.3,81.7 358.3,74.9 362.8,74.9 362.8,71.5 365.1,71.5 365.1,70.4 366.2,70.4 366.2,68.1 367.3,68.1 367.3,63.6 368.5,63.6 368.5,57.9 369.6,57.9 369.6,56.8 370.7,56.8 370.7,55.7 379.8,55.7 379.8,54.5 382.1,54.5 382.1,53.4 383.2,53.4 383.2,52.3 387.7,52.3 387.7,51.1 388.9,51.1 388.9,50.0 390.0,50.0" fill="none" stroke="#2563eb" stroke-width="2"/>
+<rect x="60" y="47" width="12" height="3" fill="#2563eb"/>
+<text x="78" y="52">in_distribution (AUROC 0.51)</text>
+</svg>
+<p class="hint">Pick a threshold from the curve: lower it to miss fewer cases
+(more false alarms), raise it to cut false alarms (more misses). To save as PDF,
+use your browser's Print → Save as PDF.</p>

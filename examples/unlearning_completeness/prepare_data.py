@@ -127,6 +127,17 @@ TAXONOMIES = {"wmdp-bio": BIO_FAMILIES, "wmdp-cyber": CYBER_FAMILIES,
 LETTERS = ["A", "B", "C", "D"]
 
 
+def taxonomy_fingerprint(domain: str) -> str:
+    """Stable sha256 of the ordered keyword taxonomy for a domain. First-match
+    ordering and keyword lists fully determine the leave-one-family-out split
+    and the class balance the engine's anti-gerrymandering gate checks, so this
+    digest is what a preregistration must freeze to make the family split a
+    checkable commitment rather than editable prose."""
+    payload = json.dumps([[name, list(kws)] for name, kws in TAXONOMIES[domain]],
+                         sort_keys=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 def assign_family(question: str, taxonomy: list[tuple[str, tuple[str, ...]]]) -> str:
     q = question.lower()
     for name, keywords in taxonomy:

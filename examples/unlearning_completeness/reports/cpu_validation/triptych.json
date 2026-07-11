@@ -9,6 +9,7 @@
     "tightened": [],
     "loosened": []
   },
+  "preregistered": false,
   "cells": [
     {
       "layer": 7,
@@ -17,9 +18,9 @@
       "by_role": {
         "base": {
           "name": "base_qwen15b-base_L7_logistic_regression",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.53725,
           "probe_auroc_ci": {
             "point": 0.53725,
@@ -37,14 +38,13 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         },
         "anchor": {
           "name": "anchor_qwen15b-anchor_L7_logistic_regression",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.46452222222222217,
           "probe_auroc_ci": {
             "point": 0.46452222222222217,
@@ -62,8 +62,7 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         }
       }
     },
@@ -74,9 +73,9 @@
       "by_role": {
         "base": {
           "name": "base_qwen15b-base_L7_mean_diff",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.5149222222222223,
           "probe_auroc_ci": {
             "point": 0.5149222222222223,
@@ -94,14 +93,13 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         },
         "anchor": {
           "name": "anchor_qwen15b-anchor_L7_mean_diff",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.49477777777777776,
           "probe_auroc_ci": {
             "point": 0.49477777777777776,
@@ -119,8 +117,7 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         }
       }
     },
@@ -131,9 +128,9 @@
       "by_role": {
         "base": {
           "name": "base_qwen15b-base_L14_logistic_regression",
+          "verdict": "surface_confounded",
           "verdict_raw": "surface_confounded",
           "status": "ok",
-          "verdict": "surface_confounded",
           "probe_auroc": 0.6158222222222223,
           "probe_auroc_ci": {
             "point": 0.6158222222222223,
@@ -151,14 +148,13 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         },
         "anchor": {
           "name": "anchor_qwen15b-anchor_L14_logistic_regression",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.5133277777777778,
           "probe_auroc_ci": {
             "point": 0.5133277777777778,
@@ -176,8 +172,7 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         }
       }
     },
@@ -188,9 +183,9 @@
       "by_role": {
         "base": {
           "name": "base_qwen15b-base_L14_mean_diff",
+          "verdict": "surface_confounded",
           "verdict_raw": "surface_confounded",
           "status": "ok",
-          "verdict": "surface_confounded",
           "probe_auroc": 0.6108888888888889,
           "probe_auroc_ci": {
             "point": 0.6108888888888889,
@@ -208,14 +203,13 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         },
         "anchor": {
           "name": "anchor_qwen15b-anchor_L14_mean_diff",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.5167666666666666,
           "probe_auroc_ci": {
             "point": 0.5167666666666666,
@@ -233,8 +227,7 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         }
       }
     },
@@ -245,9 +238,9 @@
       "by_role": {
         "base": {
           "name": "base_qwen15b-base_L20_logistic_regression",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.5541444444444444,
           "probe_auroc_ci": {
             "point": 0.5541444444444444,
@@ -265,14 +258,13 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         },
         "anchor": {
           "name": "anchor_qwen15b-anchor_L20_logistic_regression",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.5094388888888889,
           "probe_auroc_ci": {
             "point": 0.5094388888888889,
@@ -290,8 +282,7 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         }
       }
     },
@@ -302,9 +293,9 @@
       "by_role": {
         "base": {
           "name": "base_qwen15b-base_L20_mean_diff",
+          "verdict": "surface_confounded",
           "verdict_raw": "surface_confounded",
           "status": "ok",
-          "verdict": "surface_confounded",
           "probe_auroc": 0.5793444444444444,
           "probe_auroc_ci": {
             "point": 0.5793444444444444,
@@ -322,14 +313,13 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         },
         "anchor": {
           "name": "anchor_qwen15b-anchor_L20_mean_diff",
+          "verdict": "not_decodable",
           "verdict_raw": "not_decodable",
           "status": "ok",
-          "verdict": "not_decodable",
           "probe_auroc": 0.4963,
           "probe_auroc_ci": {
             "point": 0.4963,
@@ -347,8 +337,7 @@
           "beats_baselines": false,
           "protocol_violations": [],
           "n_examples": 600,
-          "n_families": 7,
-          "held_out_scheme": "leave-one-family-out"
+          "n_families": 7
         }
       }
     }
