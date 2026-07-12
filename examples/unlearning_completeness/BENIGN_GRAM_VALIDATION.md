@@ -108,6 +108,56 @@ weapons-proxy data, no dual-use knowledge anywhere in the loop. This validation
 carries none of the dual-use constraints of the real phase-2 audit, and can be
 carried through end to end.
 
+## GRAM integration (grounded in the authors' code)
+
+Read from `agencyenterprise/modular-pretraining` — this replaces the earlier
+placeholders with the real mechanism:
+
+**Model.** `src/model/moe.py` `MoETransformer`: every block holds an MoE with one
+`core` expert + one auxiliary expert per category. The stories model is **core +
+4 topic modules** (`get_labels()` → `aux_labels = all_labels[:4]`). Toggle is a
+forward-time mask, no retraining:
+
+- `MoE.forward(..., fwd_mask, bck_mask)` — `fwd_mask[i]=0` deletes expert *i*;
+  `fwd_mask[i]=α∈[0,1]` scales it.
+- `toggle_on` = all-ones `fwd_mask`; `toggle_off(T)` = zero the expert for topic
+  *T*; **fractional α gives a free dose-response ladder** for the causal stage.
+
+**The five conditions map onto GRAM's own checkpoints — nothing to invent:**
+
+| condition | source in their code |
+|---|---|
+| `toggle_on` / `toggle_off` | one routed `MoETransformer`, two `fwd_mask`s |
+| `never_trained` | their **Baseline / data-filtered** checkpoint (topic *T* excluded) |
+| `suppressed` | their **MaxEnt** checkpoint (`methods/run_maxent_from_bo.py`) — GRAM's own recover-to-baseline suppression baseline |
+| `shuffle_floor` | any state + within-family label shuffle |
+
+**Topics/data.** Data-driven: `get_labels()` reads `STORIES_DATA/metadata.json`;
+per-topic stories live in `src/data/stories/{topic}_test.bin` (EOS-separated).
+Freeze the held-out topic *T* and the 4-topic taxonomy from `metadata.json`
+before any run, digest-bound.
+
+**Reproduction runbook** (their code; ~few GPU-hours at 26M):
+
+```
+git clone https://github.com/agencyenterprise/modular-pretraining
+python -m src.run.experiment.stories.methods.run   # routed MoE + baseline + maxent
+# -> checkpoint = routed MoETransformer with 5 expert-mask configs ([core],[core,a],...)
+```
+
+**Glue to add in `sieve-audit` (the only new code):**
+
+- `gram_stories/load.py` — wrap `MoETransformer`; `condition(name, topic)` returns
+  a model whose forward applies the right `fwd_mask`.
+- `gram_stories/prepare_data.py` — matched topic-present/absent statements from
+  `{topic}_test.bin` + the `metadata.json` taxonomy (mirrors WMDP `prepare_data`).
+- reuse `unlearning_audit.py build-bundle` + `run_triptych.py` **unchanged** for
+  the tetrad; add the relearning-arm runner.
+
+**Confirm at build time from their config:** exact 26M dims (`GetStoriesConfig`:
+`num_layers`/`core_dim`/`aux_dim`), the four topic names (`metadata.json`), and
+the training/elicitation step budget.
+
 ## Relationship to the other docs
 
 - `RESULTS_PHASE1.md` — the banked 7B RMU result whose weak-instrument caveat
